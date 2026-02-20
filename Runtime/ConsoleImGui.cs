@@ -10,6 +10,7 @@ namespace UnityEssentials
         private static readonly List<string> s_history = new(32);
 
         private static bool s_autoScroll = true;
+        private static bool s_collapse = true;
 
         private static readonly List<ConsoleCommandRegistry.Command> s_suggestions = new(16);
         private static int s_suggestionIndex;
@@ -40,6 +41,7 @@ namespace UnityEssentials
                 return;
 
             var data = ConsoleHost.Data;
+            data.Config.CollapseDuplicates = s_collapse;
 
             ImGui.SetNextWindowSize(new System.Numerics.Vector2(900, 500), ImGuiCond.FirstUseEver);
 
@@ -105,8 +107,9 @@ namespace UnityEssentials
                     var color = GetColor(entry.Severity);
                     if (color.HasValue)
                         ImGui.PushStyleColor(ImGuiCol.Text, (System.Numerics.Vector4)color.Value);
-
-                    ImGui.TextUnformatted(entry.Message);
+                    
+                    // Show the message, adding a count suffix only when collapsing and there are multiple entries
+                    ImGui.TextUnformatted(entry.Message + (s_collapse && entry.Count > 1 ? $" (x{entry.Count})" : string.Empty));
 
                     if (color.HasValue)
                         ImGui.PopStyleColor();
@@ -384,7 +387,7 @@ namespace UnityEssentials
                 {
                     if (data->EventKey == ImGuiKey.UpArrow)
                         s_suggestionIndex = Mathf.Max(0, s_suggestionIndex - 1);
-                    
+
                     if (data->EventKey == ImGuiKey.DownArrow)
                         s_suggestionIndex = Mathf.Min(s_suggestions.Count - 1, s_suggestionIndex + 1);
 

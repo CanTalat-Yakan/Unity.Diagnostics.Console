@@ -20,8 +20,9 @@ namespace UnityEssentials
         public readonly ConsoleSeverity Severity;
         public readonly string Message;
         public readonly string StackTrace;
+        public readonly int Count;
 
-        public ConsoleEntry(int index, float time, int frame, ConsoleSeverity severity, string message, string stackTrace)
+        public ConsoleEntry(int index, float time, int frame, ConsoleSeverity severity, string message, string stackTrace, int count = 1)
         {
             Index = index;
             Time = time;
@@ -29,6 +30,7 @@ namespace UnityEssentials
             Severity = severity;
             Message = message;
             StackTrace = stackTrace;
+            Count = count;
         }
     }
 
@@ -39,6 +41,7 @@ namespace UnityEssentials
             public int MaxEntries = 2000;
             public bool CaptureStackTracesForWarnings = false;
             public bool CaptureStackTracesForLogs = false;
+            public bool CollapseDuplicates = true;
         }
 
         internal sealed class Filters
@@ -92,7 +95,10 @@ namespace UnityEssentials
             _count = 0;
         }
 
-        public void Add(ConsoleSeverity severity, string message, string stackTrace)
+        public void Add(ConsoleSeverity severity, string message, string stackTrace) =>
+            Add(severity, message, stackTrace, Config.CollapseDuplicates);
+
+        public void Add(ConsoleSeverity severity, string message, string stackTrace, bool collapseDuplicates)
         {
             if (_buffer.Length == 0)
                 Resize(Config.MaxEntries);
@@ -100,13 +106,40 @@ namespace UnityEssentials
             if (_buffer.Length == 0)
                 return;
 
+            message ??= string.Empty;
+            stackTrace ??= string.Empty;
+
+            // Coalesce duplicates at tail (newest), when enabled.
+            if (collapseDuplicates && _count > 0)
+            {
+                var newest = GetEntryFromNewestOffset(0);
+                if (newest.Severity == severity
+                    && string.Equals(newest.Message, message, StringComparison.Ordinal)
+                    && string.Equals(newest.StackTrace, stackTrace, StringComparison.Ordinal))
+                {
+                    var idx = (_nextWrite - 1);
+                    while (idx < 0) idx += _buffer.Length;
+
+                    _buffer[idx] = new ConsoleEntry(
+                        index: newest.Index,
+                        time: newest.Time,
+                        frame: newest.Frame,
+                        severity: newest.Severity,
+                        message: newest.Message,
+                        stackTrace: newest.StackTrace,
+                        count: newest.Count + 1);
+                    return;
+                }
+            }
+
             var entry = new ConsoleEntry(
                 index: _nextIndex++,
                 time: Time.unscaledTime,
                 frame: Time.frameCount,
                 severity: severity,
-                message: message ?? string.Empty,
-                stackTrace: stackTrace ?? string.Empty);
+                message: message,
+                stackTrace: stackTrace,
+                count: 1);
 
             _buffer[_nextWrite] = entry;
             _nextWrite = (_nextWrite + 1) % _buffer.Length;
