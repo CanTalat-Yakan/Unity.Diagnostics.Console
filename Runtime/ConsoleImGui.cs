@@ -7,16 +7,18 @@ namespace UnityEssentials
 {
     public static class ConsoleImGui
     {
-        private static readonly List<string> s_history = new(32);
+        public static bool Header = false;
+        public static bool Body = true;
 
-        private static bool s_autoScroll = true;
-        private static bool s_collapse = true;
+        public static bool Collapse = true;
+        
+        private static readonly List<string> s_history = new(32);
 
         private static readonly List<ConsoleCommandRegistry.Command> s_suggestions = new(16);
         private static int s_suggestionIndex;
         private static bool s_requestFocusInput;
 
-        // Consolidate input related state to reduce hidden coupling.
+        // Input state lives here so callbacks and draw code don't fight each other.
         private sealed class ConsoleInputState
         {
             public string Input = string.Empty;
@@ -27,7 +29,7 @@ namespace UnityEssentials
 
         private static readonly ConsoleInputState s_inputState = new();
 
-        // Cached UTF8 encoder + reusable buffer to avoid transient allocations in native callbacks.
+        // Reuse encoder/buffer to keep allocations out of the native callbacks.
         private static readonly System.Text.UTF8Encoding s_utf8 = new(false);
         private static byte[] s_utf8Buffer = new byte[2048];
 
@@ -41,24 +43,126 @@ namespace UnityEssentials
                 return;
 
             var data = ConsoleHost.Data;
-            data.Config.CollapseDuplicates = s_collapse;
+            data.Config.CollapseDuplicates = Collapse;
 
-            ImGui.SetNextWindowSize(new System.Numerics.Vector2(900, 500), ImGuiCond.FirstUseEver);
+            var inputOnly = !Header && !Body;
+            var headerOnly = Header && !Body;
+
+            // Viewport work area (used for the overlay/no-header layout).
+            ImGuiViewportPtr vp = default;
+            System.Numerics.Vector2 workPos = default;
+            System.Numerics.Vector2 workSize = default;
+
+            if (!Header)
+            {
+                vp = ImGui.GetMainViewport();
+                workPos = vp.WorkPos;
+                workSize = vp.WorkSize;
+            }
+
+            if (!Header)
+            {
+                // Undecorated overlay: default near the bottom.
+                // Anchor to bottom so height changes don't push it off-screen.
+                var defaultWidth = Mathf.Clamp(workSize.X * 0.55f, 420f, 900f);
+                var defaultX = workPos.X + (workSize.X - defaultWidth) * 0.5f;
+
+                var defaultHeight = inputOnly
+                    ? (ImGui.GetFrameHeightWithSpacing() + ImGui.GetStyle().WindowPadding.Y * 2f)
+                    : Mathf.Clamp(workSize.Y * 0.45f, 220f, 520f);
+
+                var targetBottomY = workPos.Y + workSize.Y * (2f / 3f);
+                var defaultY = targetBottomY - defaultHeight;
+
+                // Keep within the work area.
+                defaultY = Mathf.Clamp(defaultY, workPos.Y, workPos.Y + workSize.Y - defaultHeight);
+
+                ImGui.SetNextWindowPos(new System.Numerics.Vector2(defaultX, defaultY), ImGuiCond.FirstUseEver);
+                ImGui.SetNextWindowSize(new System.Numerics.Vector2(defaultWidth, defaultHeight), ImGuiCond.FirstUseEver);
+            }
+
+            if (inputOnly)
+            {
+                // Input-only: lock height to a single row.
+                var style = ImGui.GetStyle();
+                var height = ImGui.GetFrameHeight() + style.WindowPadding.Y * 2f;
+                ImGui.SetNextWindowSizeConstraints(
+                    new System.Numerics.Vector2(200, height),
+                    new System.Numerics.Vector2(float.MaxValue, height));
+                ImGui.SetNextWindowSize(new System.Numerics.Vector2(900, height), ImGuiCond.Always);
+            }
+            else if (headerOnly)
+            {
+                // Header + input: lock height, allow horizontal resize.
+                var style = ImGui.GetStyle();
+
+                var contentHeight = ImGui.GetFrameHeight();
+
+                // Approximate title bar height using the frame height.
+                var titleBarHeight = ImGui.GetFrameHeight();
+                var height = titleBarHeight + contentHeight + style.WindowPadding.Y * 2f;
+
+                ImGui.SetNextWindowSizeConstraints(
+                    new System.Numerics.Vector2(260, height),
+                    new System.Numerics.Vector2(float.MaxValue, height));
+
+                ImGui.SetNextWindowSize(new System.Numerics.Vector2(900, height), ImGuiCond.FirstUseEver);
+            }
+            else
+            {
+                ImGui.SetNextWindowSize(new System.Numerics.Vector2(900, 500), ImGuiCond.FirstUseEver);
+            }
 
             var open = true;
-            if (!ImGui.Begin("Console", ref open, ImGuiWindowFlags.NoCollapse))
+
+            var windowFlags = ImGuiWindowFlags.NoCollapse;
+            if (!Header)
+            {
+                windowFlags |= ImGuiWindowFlags.NoTitleBar;
+                windowFlags |= ImGuiWindowFlags.NoMove;
+                windowFlags |= ImGuiWindowFlags.NoResize;
+
+                if (inputOnly)
+                    windowFlags |= ImGuiWindowFlags.NoSavedSettings;
+            }
+            else if (headerOnly)
+            {
+                // Height is locked via size constraints; keep resize enabled so the user can still resize horizontally.
+                // (Vertical resizing won't change anything because minY == maxY.)
+            }
+
+            if (!ImGui.Begin("Console", ref open, windowFlags))
             {
                 ImGui.End();
-                if (!open)
+                if (Header && !open)
                     ConsoleHost.Enabled = false;
                 return;
             }
 
-            if (!open)
+            if (Header && !open)
             {
                 ImGui.End();
                 ConsoleHost.Enabled = false;
                 return;
+            }
+
+            // No-header mode: clamp again after final size is known.
+            if (!Header)
+            {
+                var pos = ImGui.GetWindowPos();
+                var size = ImGui.GetWindowSize();
+
+                var minX = workPos.X;
+                var maxX = workPos.X + workSize.X - size.X;
+                var minY = workPos.Y;
+                var maxY = workPos.Y + workSize.Y - size.Y;
+
+                var clamped = new System.Numerics.Vector2(
+                    Mathf.Clamp(pos.X, minX, maxX),
+                    Mathf.Clamp(pos.Y, minY, maxY));
+
+                if (clamped.X != pos.X || clamped.Y != pos.Y)
+                    ImGui.SetWindowPos(clamped);
             }
 
             DrawLogBodyWithFixedInput(data);
@@ -68,19 +172,22 @@ namespace UnityEssentials
 
         private static void DrawLogBodyWithFixedInput(ConsoleData data)
         {
-            // Space reserved for the input row.
-            var footerHeight = ImGui.GetFrameHeightWithSpacing() + 6f;
+            if (Body)
+            {
+                // Leave room for the input row.
+                var footerHeight = ImGui.GetFrameHeightWithSpacing() + 6f;
 
-            // Scrollback.
-            var avail = ImGui.GetContentRegionAvail();
-            var bodySize = new System.Numerics.Vector2(avail.X, Mathf.Max(50, avail.Y - footerHeight));
-            DrawLogList(data, bodySize);
+                // Log output.
+                var avail = ImGui.GetContentRegionAvail();
+                var bodySize = new System.Numerics.Vector2(avail.X, Mathf.Max(50, avail.Y - footerHeight));
+                DrawLogList(data, bodySize);
 
-            // Input row.
-            ImGui.Separator();
+                ImGui.Separator();
+            }
+
             DrawInputBar();
 
-            // Suggestions (positioned relative to the input).
+            // Suggestions pop over the input.
             DrawSuggestionsFlyout();
         }
 
@@ -90,8 +197,7 @@ namespace UnityEssentials
 
             ImGui.PushTextWrapPos(0);
 
-            // Drawing all log lines every frame scales poorly; clip to visible range.
-            // We keep the UI order newest-first, so we clip over filtered indices.
+            // Only draw what's visible.
             var visibleIndices = GetVisibleIndices(data);
 
             var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
@@ -107,9 +213,9 @@ namespace UnityEssentials
                     var color = GetColor(entry.Severity);
                     if (color.HasValue)
                         ImGui.PushStyleColor(ImGuiCol.Text, (System.Numerics.Vector4)color.Value);
-                    
+
                     // Show the message, adding a count suffix only when collapsing and there are multiple entries
-                    ImGui.TextUnformatted(entry.Message + (s_collapse && entry.Count > 1 ? $" (x{entry.Count})" : string.Empty));
+                    ImGui.TextUnformatted(entry.Message + (Collapse && entry.Count > 1 ? $" (x{entry.Count})" : string.Empty));
 
                     if (color.HasValue)
                         ImGui.PopStyleColor();
@@ -128,9 +234,9 @@ namespace UnityEssentials
 
             ImGui.PopTextWrapPos();
 
-            // Only autoscroll if we were already at the bottom.
+            // Auto-scroll only if we're already at the bottom.
             var atBottom = ImGui.GetScrollY() >= ImGui.GetScrollMaxY() - ImGui.GetTextLineHeight();
-            if (s_autoScroll && atBottom)
+            if (atBottom)
                 ImGui.SetScrollHereY(1f);
 
             ImGui.EndChild();
@@ -138,9 +244,7 @@ namespace UnityEssentials
 
         private static List<int> GetVisibleIndices(ConsoleData data)
         {
-            // Cache list instance? Kept simple for now; still avoids per-line ImGui work when clipped.
-            // Note: data.Count is bounded by config (default max) so this allocation is acceptable,
-            // but can be optimized later by persisting a list.
+            // Allocates a small list each frame; data.Count is capped, and clipping keeps draw cost low.
             var indices = new List<int>(data.Count);
             for (var i = data.Count - 1; i >= 0; i--)
             {
@@ -163,7 +267,7 @@ namespace UnityEssentials
                         | ImGuiInputTextFlags.CallbackCompletion
                         | ImGuiInputTextFlags.CallbackEdit;
 
-            // Rendering must not mutate logic state; autocomplete updates happen in callbacks.
+            // Autocomplete/history are handled in the ImGui callback.
             if (ImGui.InputText("##console_input", ref s_inputState.Input, 2048, flags, InputCallback))
             {
                 var line = s_inputState.Input;
@@ -184,7 +288,7 @@ namespace UnityEssentials
                 ImGui.SetKeyboardFocusHere(-1);
             }
 
-            // Re-focus input after applying a suggestion.
+            // Refocus after tab completion.
             if (s_requestFocusInput)
             {
                 ImGui.SetKeyboardFocusHere(-1);
@@ -205,7 +309,7 @@ namespace UnityEssentials
             if (string.IsNullOrWhiteSpace(GetCommandQuery(s_inputState.Input)))
                 return;
 
-            // Anchor to the input rect (DrawInputBar drew the previous item).
+            // Position relative to the input item.
             var inputMin = ImGui.GetItemRectMin();
             var inputMax = ImGui.GetItemRectMax();
 
@@ -222,7 +326,7 @@ namespace UnityEssentials
             ImGui.SetNextWindowPos(new System.Numerics.Vector2(inputMin.X, inputMin.Y - height - 2f), ImGuiCond.Always);
             ImGui.SetNextWindowSize(new System.Numerics.Vector2(width, height), ImGuiCond.Always);
 
-            // Tooltip renders above the console window.
+            // Draw as a tooltip so it's above the console window.
             var flags = ImGuiWindowFlags.NoTitleBar
                         | ImGuiWindowFlags.NoResize
                         | ImGuiWindowFlags.NoMove
@@ -243,7 +347,7 @@ namespace UnityEssentials
             if (s_suggestionIndex >= s_suggestions.Count)
                 s_suggestionIndex = s_suggestions.Count - 1;
 
-            // Default to the first entry once there's a token.
+            // Once we have a token, default to the first entry.
             if (s_suggestionIndex < 0 && !string.IsNullOrWhiteSpace(GetCommandQuery(s_inputState.Input)))
                 s_suggestionIndex = 0;
 
@@ -260,7 +364,7 @@ namespace UnityEssentials
 
                 if (ImGui.Selectable(label, i == s_suggestionIndex))
                 {
-                    // Only change the highlighted suggestion.
+                    // Keep selection in sync with clicks.
                     s_suggestionIndex = i;
                     s_requestFocusInput = true;
                 }
@@ -295,7 +399,7 @@ namespace UnityEssentials
 
             s_inputState.LastQuery = query;
 
-            // Preserve current highlighted selection when possible.
+            // Try to keep the currently selected entry.
             var previousSelectedName = (s_suggestionIndex >= 0 && s_suggestionIndex < s_suggestions.Count)
                 ? s_suggestions[s_suggestionIndex].Name
                 : null;
@@ -314,7 +418,7 @@ namespace UnityEssentials
             {
                 var cmd = cmds[i];
 
-                // If the user already typed a full command name, don't suggest the exact same command.
+                // Don't suggest the exact command name if it's already fully typed.
                 if (string.Equals(cmd.Name, query, StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -342,7 +446,7 @@ namespace UnityEssentials
                         return;
                     }
 
-            // Otherwise clamp the existing index into range (or default to first).
+            // Otherwise pick something sensible.
             s_suggestionIndex = Mathf.Clamp(s_suggestionIndex, 0, s_suggestions.Count - 1);
         }
 
@@ -351,7 +455,7 @@ namespace UnityEssentials
             if (string.IsNullOrWhiteSpace(query))
                 return NavigationMode.History;
 
-            // Up/Down navigates suggestions only after a selection is active.
+            // Up/Down goes through suggestions only when a suggestion is active.
             if (s_suggestions.Count > 0 && s_suggestionIndex >= 0)
                 return NavigationMode.Suggestions;
 
@@ -364,7 +468,7 @@ namespace UnityEssentials
             {
                 s_inputState.UserEdited = true;
 
-                // Pull current buffer into managed input so everything reads a single source of truth.
+                // Sync managed input with the native buffer.
                 var current = ReadFromImGuiInputBuffer(data);
                 s_inputState.Input = current;
 
@@ -432,7 +536,7 @@ namespace UnityEssentials
                     s_inputState.Input = s_history[s_inputState.HistoryIndex];
                 }
 
-                // History changes are programmatic.
+                // History changes are not user edits.
                 s_inputState.UserEdited = false;
 
                 WriteToImGuiInputBuffer(data, s_inputState.Input);
@@ -463,7 +567,7 @@ namespace UnityEssentials
 
                 s_inputState.Input = completed;
 
-                // Completion is programmatic.
+                // Completion isn't a user edit.
                 s_inputState.UserEdited = false;
 
                 s_suggestions.Clear();
@@ -497,7 +601,7 @@ namespace UnityEssentials
         {
             value ??= string.Empty;
 
-            // Encode into reusable buffer.
+            // Encode into the reusable buffer.
             var maxBytes = data->BufSize > 0 ? data->BufSize - 1 : 0;
             var byteCount = s_utf8.GetByteCount(value);
 

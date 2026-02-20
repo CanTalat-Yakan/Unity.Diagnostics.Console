@@ -32,13 +32,38 @@ namespace UnityEssentials
                 : "Commands: " + string.Join(", ", list);
         }
 
+        [Console("header", "Toggles console header. Usage: header <on/off>")]
+        private static void ShowConsoleHeader(bool header) => 
+            ConsoleImGui.Header = header;
+        
+        [Console("body", "Toggles console body. Usage: body <on/off>")]
+        private static void ShowConsoleBody(bool body) => 
+            ConsoleImGui.Body = body;
+        
+        [Console("collapse", "Toggles log collapsing. Usage: collapse <on/off>")]
+        private static void CollapseConsole(bool collapse) => 
+            ConsoleImGui.Collapse = collapse;
+        
         [Console("clear", "Clears the console log")]
-        private static void Clear() =>
+        private static void Clear()
+        {
             ConsoleHost.Clear();
+
+#if UNITY_EDITOR
+            // Also clear the Editor Console.
+            var logEntriesType = Type.GetType("UnityEditor.LogEntries, UnityEditor.dll");
+            var clearMethod = logEntriesType?.GetMethod("Clear", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
+            clearMethod?.Invoke(null, null);
+#endif
+        }
 
         [Console("echo", "Echoes arguments back. Usage: echo <text>")]
         private static string Echo(string args) =>
             args ?? string.Empty;
+        
+        [Console("log", "Logs message. Usage: log <text>")]
+        private static void Log(string args) =>
+            Debug.Log(args ?? string.Empty);
 
         [Console("timescale", "Gets/sets Time.timeScale. Usage: timescale or timescale <float>")]
         private static string TimeScale(string args)
@@ -62,4 +87,3 @@ namespace UnityEssentials
         }
     }
 }
-
