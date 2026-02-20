@@ -25,9 +25,18 @@ namespace UnityEssentials
 
         private readonly Dictionary<string, Command> _commands = new(StringComparer.OrdinalIgnoreCase);
 
+        // Cache a stable sorted view for UI/autocomplete. Rebuilt only when registry changes.
+        private readonly List<Command> _sortedCommands = new(128);
+
         public IEnumerable<Command> AllCommands => _commands.Values;
 
-        public void Clear() => _commands.Clear();
+        public IReadOnlyList<Command> SortedCommands => _sortedCommands;
+
+        public void Clear()
+        {
+            _commands.Clear();
+            _sortedCommands.Clear();
+        }
 
         public void RegisterFromLoadedAssemblies()
         {
@@ -68,6 +77,10 @@ namespace UnityEssentials
                     }
                 }
             }
+
+            // Build a sorted view once.
+            _sortedCommands.AddRange(_commands.Values);
+            _sortedCommands.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name));
         }
 
         public bool TryGet(string name, out Command cmd) =>

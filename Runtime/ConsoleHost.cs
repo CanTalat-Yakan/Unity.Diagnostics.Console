@@ -12,50 +12,22 @@ namespace UnityEssentials
         internal static readonly ConsoleCommandRegistry Commands = new();
 
         private static readonly ConcurrentQueue<(string Condition, string StackTrace, LogType Type)> s_logQueue = new();
-        private static bool s_hooked;
+        
+        private bool _hooked;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Initialize()
-        {
-            _ = Instance;
-
+        private static void Initialize() =>
             Commands.RegisterFromLoadedAssemblies();
 
-            HookLogs();
-        }
-
-        private static void HookLogs()
-        {
-            if (s_hooked)
-                return;
-
-            s_hooked = true;
-            Application.logMessageReceivedThreaded += OnLogMessageReceivedThreaded;
-        }
-
-        private static void UnhookLogs()
-        {
-            if (!s_hooked)
-                return;
-
-            s_hooked = false;
-            Application.logMessageReceivedThreaded -= OnLogMessageReceivedThreaded;
-        }
-
-        private static void OnLogMessageReceivedThreaded(string condition, string stackTrace, LogType type)
-        {
-            s_logQueue.Enqueue((condition, stackTrace, type));
-        }
-
-        private void OnEnable() =>
-            HookLogs();
-
-        private void OnDisable() =>
-            UnhookLogs();
+        private void OnEnable() => 
+            EnsureHooked();
+        
+        private void OnDisable() => 
+            Unhook();
 
         protected override void OnDestroy()
         {
-            UnhookLogs();
+            Unhook();
             base.OnDestroy();
         }
 
@@ -65,10 +37,32 @@ namespace UnityEssentials
                 return;
 
             DrainLogsIntoBuffer();
-
+            
             ConsoleImGui.DrawImGui();
         }
 
+        private void EnsureHooked()
+        {
+            if (_hooked)
+                return;
+
+            Application.logMessageReceivedThreaded -= OnLog;
+            Application.logMessageReceivedThreaded += OnLog;
+            _hooked = true;
+        }
+
+        private void Unhook()
+        {
+            if (!_hooked)
+                return;
+
+            Application.logMessageReceivedThreaded -= OnLog;
+            _hooked = false;
+        }
+
+        private static void OnLog(string condition, string stackTrace, LogType type) =>
+            s_logQueue.Enqueue((condition, stackTrace, type));
+        
         private static void DrainLogsIntoBuffer()
         {
             // Resize if user changed max entries.

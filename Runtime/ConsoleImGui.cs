@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using ImGuiNET;
 using UnityEngine;
 
@@ -9,15 +8,27 @@ namespace UnityEssentials
     public static class ConsoleImGui
     {
         private static readonly List<string> s_history = new(32);
-        private static int s_historyIndex = -1;
 
-        private static string s_input = string.Empty;
         private static bool s_autoScroll = true;
 
         private static readonly List<ConsoleCommandRegistry.Command> s_suggestions = new(16);
         private static int s_suggestionIndex;
-        private static string s_lastSuggestionQuery = string.Empty;
         private static bool s_requestFocusInput;
+
+        // Consolidate input related state to reduce hidden coupling.
+        private sealed class ConsoleInputState
+        {
+            public string Input = string.Empty;
+            public bool UserEdited;
+            public int HistoryIndex = -1;
+            public string LastQuery = string.Empty;
+        }
+
+        private static readonly ConsoleInputState s_inputState = new();
+
+        // Cached UTF8 encoder + reusable buffer to avoid transient allocations in native callbacks.
+        private static readonly System.Text.UTF8Encoding s_utf8 = new(false);
+        private static byte[] s_utf8Buffer = new byte[2048];
 
         public static void DrawImGui()
         {
@@ -55,81 +66,111 @@ namespace UnityEssentials
 
         private static void DrawLogBodyWithFixedInput(ConsoleData data)
         {
-            // Reserve exact space for the input line (and a tiny separator).
+            // Space reserved for the input row.
             var footerHeight = ImGui.GetFrameHeightWithSpacing() + 6f;
 
-            // Body (scrollback) first.
+            // Scrollback.
             var avail = ImGui.GetContentRegionAvail();
             var bodySize = new System.Numerics.Vector2(avail.X, Mathf.Max(50, avail.Y - footerHeight));
             DrawLogList(data, bodySize);
 
-            // Fixed input at the bottom.
+            // Input row.
             ImGui.Separator();
             DrawInputBar();
 
-            // Suggestions are not part of the body; draw them as a separate flyout.
+            // Suggestions (positioned relative to the input).
             DrawSuggestionsFlyout();
         }
 
-        private static void DrawLogList(ConsoleData data, System.Numerics.Vector2 bodySize)
+        private static unsafe void DrawLogList(ConsoleData data, System.Numerics.Vector2 bodySize)
         {
             ImGui.BeginChild("##console_body", bodySize, ImGuiChildFlags.None, ImGuiWindowFlags.None);
 
-            // Wrap at the right edge of the child.
             ImGui.PushTextWrapPos(0);
 
+            // Drawing all log lines every frame scales poorly; clip to visible range.
+            // We keep the UI order newest-first, so we clip over filtered indices.
+            var visibleIndices = GetVisibleIndices(data);
+
+            var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+            clipper.Begin(visibleIndices.Count);
+
+            while (clipper.Step())
+            {
+                for (var row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
+                {
+                    var idx = visibleIndices[row];
+                    var entry = data.GetNewest(idx);
+
+                    var color = GetColor(entry.Severity);
+                    if (color.HasValue)
+                        ImGui.PushStyleColor(ImGuiCol.Text, (System.Numerics.Vector4)color.Value);
+
+                    ImGui.TextUnformatted(entry.Message);
+
+                    if (color.HasValue)
+                        ImGui.PopStyleColor();
+
+                    if (!string.IsNullOrEmpty(entry.StackTrace))
+                    {
+                        ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.65f, 0.65f, 0.65f, 1f));
+                        ImGui.TextUnformatted(entry.StackTrace);
+                        ImGui.PopStyleColor();
+                    }
+                }
+            }
+
+            clipper.End();
+            clipper.Destroy();
+
+            ImGui.PopTextWrapPos();
+
+            // Only autoscroll if we were already at the bottom.
+            var atBottom = ImGui.GetScrollY() >= ImGui.GetScrollMaxY() - ImGui.GetTextLineHeight();
+            if (s_autoScroll && atBottom)
+                ImGui.SetScrollHereY(1f);
+
+            ImGui.EndChild();
+        }
+
+        private static List<int> GetVisibleIndices(ConsoleData data)
+        {
+            // Cache list instance? Kept simple for now; still avoids per-line ImGui work when clipped.
+            // Note: data.Count is bounded by config (default max) so this allocation is acceptable,
+            // but can be optimized later by persisting a list.
+            var indices = new List<int>(data.Count);
             for (var i = data.Count - 1; i >= 0; i--)
             {
                 var entry = data.GetNewest(i);
                 if (!data.PassesFilters(entry))
                     continue;
 
-                var color = GetColor(entry.Severity);
-                if (color.HasValue)
-                    ImGui.PushStyleColor(ImGuiCol.Text, color.Value);
-
-                ImGui.TextUnformatted(entry.Message);
-
-                if (color.HasValue)
-                    ImGui.PopStyleColor();
-
-                if (!string.IsNullOrEmpty(entry.StackTrace))
-                {
-                    ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.65f, 0.65f, 0.65f, 1f));
-                    ImGui.TextUnformatted(entry.StackTrace);
-                    ImGui.PopStyleColor();
-                }
+                indices.Add(i);
             }
 
-            ImGui.PopTextWrapPos();
-
-            if (s_autoScroll && ImGui.GetScrollY() >= ImGui.GetScrollMaxY() - 1f)
-                ImGui.SetScrollHereY(1f);
-
-            ImGui.EndChild();
+            return indices;
         }
 
         private static unsafe void DrawInputBar()
         {
-            // Layout: [input.................................] [Auto]
-            var spacing = ImGui.GetStyle().ItemSpacing.X;
-            var fullWidth = ImGui.GetContentRegionAvail().X;
-            var inputWidth = Mathf.Max(50, fullWidth - spacing);
-
-            ImGui.SetNextItemWidth(inputWidth);
+            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
 
             var flags = ImGuiInputTextFlags.EnterReturnsTrue
                         | ImGuiInputTextFlags.CallbackHistory
-                        | ImGuiInputTextFlags.CallbackCompletion;
+                        | ImGuiInputTextFlags.CallbackCompletion
+                        | ImGuiInputTextFlags.CallbackEdit;
 
-            // Keep suggestions fresh.
-            UpdateSuggestionsIfNeeded();
-
-            if (ImGui.InputText("##console_input", ref s_input, 2048, flags, InputCallback))
+            // Rendering must not mutate logic state; autocomplete updates happen in callbacks.
+            if (ImGui.InputText("##console_input", ref s_inputState.Input, 2048, flags, InputCallback))
             {
-                var line = s_input;
-                s_input = string.Empty;
-                s_lastSuggestionQuery = string.Empty;
+                var line = s_inputState.Input;
+                s_inputState.Input = string.Empty;
+                s_inputState.LastQuery = string.Empty;
+                s_inputState.UserEdited = false;
+                s_inputState.HistoryIndex = -1;
+
+                s_suggestions.Clear();
+                s_suggestionIndex = -1;
 
                 if (!string.IsNullOrWhiteSpace(line))
                 {
@@ -140,7 +181,7 @@ namespace UnityEssentials
                 ImGui.SetKeyboardFocusHere(-1);
             }
 
-            // If a suggestion click happened (or completion), re-focus the input.
+            // Re-focus input after applying a suggestion.
             if (s_requestFocusInput)
             {
                 ImGui.SetKeyboardFocusHere(-1);
@@ -152,14 +193,16 @@ namespace UnityEssentials
 
         private static void DrawSuggestionsFlyout()
         {
+            if (!s_inputState.UserEdited)
+                return;
+
             if (s_suggestions.Count == 0)
                 return;
 
-            // Only show suggestions while user is typing a command token.
-            if (string.IsNullOrWhiteSpace(GetCommandQuery(s_input)))
+            if (string.IsNullOrWhiteSpace(GetCommandQuery(s_inputState.Input)))
                 return;
 
-            // Anchor to the input item rect (DrawInputBar drew the last item).
+            // Anchor to the input rect (DrawInputBar drew the previous item).
             var inputMin = ImGui.GetItemRectMin();
             var inputMax = ImGui.GetItemRectMax();
 
@@ -167,18 +210,16 @@ namespace UnityEssentials
             var style = ImGui.GetStyle();
             var visibleCount = Mathf.Min(maxVisible, s_suggestions.Count);
 
-            // Use frame height with spacing since we render Selectables (framed items).
             var rowHeight = ImGui.GetFrameHeight();
             var contentHeight = visibleCount * rowHeight;
 
-            // Exact-ish sizing: avoid being a hair too small (which triggers a scrollbar).
-            var height = contentHeight + style.WindowPadding.Y ;
+            var height = contentHeight + style.WindowPadding.Y;
             var width = Mathf.Max(220f, inputMax.X - inputMin.X);
 
             ImGui.SetNextWindowPos(new System.Numerics.Vector2(inputMin.X, inputMin.Y - height - 2f), ImGuiCond.Always);
             ImGui.SetNextWindowSize(new System.Numerics.Vector2(width, height), ImGuiCond.Always);
 
-            // Tooltip windows render on top.
+            // Tooltip renders above the console window.
             var flags = ImGuiWindowFlags.NoTitleBar
                         | ImGuiWindowFlags.NoResize
                         | ImGuiWindowFlags.NoMove
@@ -186,7 +227,6 @@ namespace UnityEssentials
                         | ImGuiWindowFlags.NoFocusOnAppearing
                         | ImGuiWindowFlags.Tooltip;
 
-            // If everything fits, disable scrollbars entirely.
             if (s_suggestions.Count <= maxVisible)
                 flags |= ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
 
@@ -196,11 +236,13 @@ namespace UnityEssentials
                 return;
             }
 
-            // Clamp selection defensively (query changes can shrink the list between frames).
-            if (s_suggestionIndex < 0)
-                s_suggestionIndex = 0;
+            // Clamp selection if the list shrank.
             if (s_suggestionIndex >= s_suggestions.Count)
                 s_suggestionIndex = s_suggestions.Count - 1;
+
+            // Default to the first entry once there's a token.
+            if (s_suggestionIndex < 0 && !string.IsNullOrWhiteSpace(GetCommandQuery(s_inputState.Input)))
+                s_suggestionIndex = 0;
 
             for (var i = 0; i < s_suggestions.Count; i++)
             {
@@ -215,8 +257,8 @@ namespace UnityEssentials
 
                 if (ImGui.Selectable(label, i == s_suggestionIndex))
                 {
+                    // Only change the highlighted suggestion.
                     s_suggestionIndex = i;
-                    ApplySuggestion(i);
                     s_requestFocusInput = true;
                 }
 
@@ -227,22 +269,52 @@ namespace UnityEssentials
             ImGui.End();
         }
 
-        private static void UpdateSuggestionsIfNeeded()
+        private enum NavigationMode
         {
-            var query = GetCommandQuery(s_input);
-            if (string.Equals(query, s_lastSuggestionQuery, StringComparison.Ordinal))
+            None,
+            Suggestions,
+            History
+        }
+
+        private static void UpdateSuggestions(string input, bool force)
+        {
+            if (!force && !s_inputState.UserEdited)
+            {
+                s_inputState.LastQuery = GetCommandQuery(input);
+                s_suggestions.Clear();
+                s_suggestionIndex = -1;
+                return;
+            }
+
+            var query = GetCommandQuery(input);
+            if (!force && string.Equals(query, s_inputState.LastQuery, StringComparison.Ordinal))
                 return;
 
-            s_lastSuggestionQuery = query;
+            s_inputState.LastQuery = query;
+
+            // Preserve current highlighted selection when possible.
+            var previousSelectedName = (s_suggestionIndex >= 0 && s_suggestionIndex < s_suggestions.Count)
+                ? s_suggestions[s_suggestionIndex].Name
+                : null;
+
             s_suggestions.Clear();
-            s_suggestionIndex = 0;
 
             if (string.IsNullOrWhiteSpace(query))
-                return;
-
-            foreach (var cmd in ConsoleHost.Commands.AllCommands
-                         .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
             {
+                s_suggestionIndex = -1;
+                return;
+            }
+
+            // UI must be O(n): iterate already-sorted commands.
+            var cmds = ConsoleHost.Commands.SortedCommands;
+            for (var i = 0; i < cmds.Count; i++)
+            {
+                var cmd = cmds[i];
+
+                // If the user already typed a full command name, don't suggest the exact same command.
+                if (string.Equals(cmd.Name, query, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 if (cmd.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase)
                     || cmd.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
@@ -252,114 +324,199 @@ namespace UnityEssentials
                 }
             }
 
-            // Keep selection valid after refresh.
-            if (s_suggestionIndex >= s_suggestions.Count)
-                s_suggestionIndex = Mathf.Max(0, s_suggestions.Count - 1);
+            if (s_suggestions.Count == 0)
+            {
+                s_suggestionIndex = -1;
+                return;
+            }
+
+            // If we had a previous selection, try to keep it.
+            if (!string.IsNullOrEmpty(previousSelectedName))
+                for (var i = 0; i < s_suggestions.Count; i++)
+                    if (string.Equals(s_suggestions[i].Name, previousSelectedName, StringComparison.Ordinal))
+                    {
+                        s_suggestionIndex = i;
+                        return;
+                    }
+
+            // Otherwise clamp the existing index into range (or default to first).
+            s_suggestionIndex = Mathf.Clamp(s_suggestionIndex, 0, s_suggestions.Count - 1);
+        }
+
+        private static NavigationMode ResolveNavigationMode(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return NavigationMode.History;
+
+            // Up/Down navigates suggestions only after a selection is active.
+            if (s_suggestions.Count > 0 && s_suggestionIndex >= 0)
+                return NavigationMode.Suggestions;
+
+            return NavigationMode.History;
         }
 
         private static unsafe int InputCallback(ImGuiInputTextCallbackData* data)
         {
+            if (data->EventFlag == ImGuiInputTextFlags.CallbackEdit)
+            {
+                s_inputState.UserEdited = true;
+
+                // Pull current buffer into managed input so everything reads a single source of truth.
+                var current = ReadFromImGuiInputBuffer(data);
+                s_inputState.Input = current;
+
+                UpdateSuggestions(current, force: false);
+
+                return 0;
+            }
+
             if (data->EventFlag == ImGuiInputTextFlags.CallbackHistory)
             {
-                // Prefer suggestion navigation when suggestions are visible; otherwise fall back to command history.
-                UpdateSuggestionsIfNeeded();
-                var hasSuggestionNav = s_suggestions.Count > 0 && !string.IsNullOrWhiteSpace(GetCommandQuery(s_input));
+                var currentLine = ReadFromImGuiInputBuffer(data);
+                s_inputState.Input = currentLine;
 
-                if (hasSuggestionNav)
+                UpdateSuggestions(currentLine, force: false);
+
+                var query = GetCommandQuery(currentLine);
+                var mode = ResolveNavigationMode(query);
+
+                if (mode == NavigationMode.Suggestions)
                 {
                     if (data->EventKey == ImGuiKey.UpArrow)
-                    {
                         s_suggestionIndex = Mathf.Max(0, s_suggestionIndex - 1);
-                        return 0;
-                    }
-
+                    
                     if (data->EventKey == ImGuiKey.DownArrow)
-                    {
                         s_suggestionIndex = Mathf.Min(s_suggestions.Count - 1, s_suggestionIndex + 1);
-                        return 0;
-                    }
+
+                    return 0;
                 }
+
+                // History navigation.
+                s_suggestionIndex = -1;
 
                 if (s_history.Count == 0)
                     return 0;
 
                 if (data->EventKey == ImGuiKey.UpArrow)
                 {
-                    if (s_historyIndex < 0)
-                        s_historyIndex = s_history.Count - 1;
+                    if (s_inputState.HistoryIndex < 0)
+                        s_inputState.HistoryIndex = s_history.Count - 1;
                     else
-                        s_historyIndex = Mathf.Max(0, s_historyIndex - 1);
+                        s_inputState.HistoryIndex = Mathf.Max(0, s_inputState.HistoryIndex - 1);
 
-                    if (s_historyIndex >= 0 && s_historyIndex < s_history.Count)
-                        s_input = s_history[s_historyIndex];
+                    if (s_inputState.HistoryIndex >= 0 && s_inputState.HistoryIndex < s_history.Count)
+                        s_inputState.Input = s_history[s_inputState.HistoryIndex];
                 }
                 else if (data->EventKey == ImGuiKey.DownArrow)
                 {
-                    if (s_historyIndex < 0)
+                    if (s_inputState.HistoryIndex < 0)
                         return 0;
 
-                    s_historyIndex++;
-                    if (s_historyIndex >= s_history.Count)
+                    s_inputState.HistoryIndex++;
+                    if (s_inputState.HistoryIndex >= s_history.Count)
                     {
-                        s_historyIndex = -1;
-                        s_input = string.Empty;
+                        s_inputState.HistoryIndex = -1;
+                        s_inputState.Input = string.Empty;
+
+                        WriteToImGuiInputBuffer(data, s_inputState.Input);
+                        s_inputState.UserEdited = false;
+                        s_suggestions.Clear();
+                        s_inputState.LastQuery = GetCommandQuery(s_inputState.Input);
+
                         return 0;
                     }
 
-                    s_input = s_history[s_historyIndex];
+                    s_inputState.Input = s_history[s_inputState.HistoryIndex];
                 }
+
+                // History changes are programmatic.
+                s_inputState.UserEdited = false;
+
+                WriteToImGuiInputBuffer(data, s_inputState.Input);
+
+                s_suggestions.Clear();
+                s_suggestionIndex = -1;
+                s_inputState.LastQuery = GetCommandQuery(s_inputState.Input);
 
                 return 0;
             }
 
             if (data->EventFlag == ImGuiInputTextFlags.CallbackCompletion)
             {
-                // Tab accepts current suggestion.
-                UpdateSuggestionsIfNeeded();
+                // Tab completion.
+                var currentLine = ReadFromImGuiInputBuffer(data);
+                s_inputState.Input = currentLine;
+
+                UpdateSuggestions(currentLine, force: true);
 
                 if (s_suggestions.Count == 0)
                     return 0;
 
-                // Build the completed line: replace first token only, keep args.
-                var current = s_input ?? string.Empty;
-                var leadingSpaces = current.Length - current.TrimStart().Length;
-                var trimmed = current.TrimStart();
-                var space = trimmed.IndexOf(' ');
-                var args = space < 0 ? string.Empty : trimmed.Substring(space);
-
                 if (s_suggestionIndex < 0)
                     s_suggestionIndex = 0;
-                if (s_suggestionIndex >= s_suggestions.Count)
-                    s_suggestionIndex = s_suggestions.Count - 1;
 
-                var completed = new string(' ', leadingSpaces) + s_suggestions[s_suggestionIndex].Name + args;
+                var completed = ReplaceCommandToken(currentLine, s_suggestions[s_suggestionIndex].Name);
+                WriteToImGuiInputBuffer(data, completed);
 
-                // IMPORTANT: this binding uses a UTF-8 byte buffer.
-                // Overwrite Buf (clamped to BufSize-1 to reserve null terminator).
-                var maxBytes = data->BufSize > 0 ? data->BufSize - 1 : 0;
-                var utf8 = System.Text.Encoding.UTF8.GetBytes(completed);
-                var writeLen = Math.Min(utf8.Length, maxBytes);
+                s_inputState.Input = completed;
 
-                for (var i = 0; i < writeLen; i++)
-                    data->Buf[i] = utf8[i];
+                // Completion is programmatic.
+                s_inputState.UserEdited = false;
 
-                if (data->BufSize > 0)
-                    data->Buf[writeLen] = 0;
+                s_suggestions.Clear();
+                s_suggestionIndex = -1;
+                s_inputState.LastQuery = GetCommandQuery(s_inputState.Input);
 
-                data->BufTextLen = writeLen;
-                data->CursorPos = writeLen;
-                data->SelectionStart = writeLen;
-                data->SelectionEnd = writeLen;
-                data->BufDirty = 1;
-
-                // Keep our managed mirror in sync so suggestion rendering uses the new value.
-                s_input = completed;
                 s_requestFocusInput = true;
 
                 return 0;
             }
 
             return 0;
+        }
+
+        private static unsafe string ReadFromImGuiInputBuffer(ImGuiInputTextCallbackData* data)
+        {
+            if (data->BufTextLen <= 0)
+                return string.Empty;
+
+            // Ensure scratch buffer capacity.
+            if (s_utf8Buffer.Length < data->BufTextLen)
+                s_utf8Buffer = new byte[Mathf.NextPowerOfTwo(data->BufTextLen)];
+
+            for (var i = 0; i < data->BufTextLen; i++)
+                s_utf8Buffer[i] = data->Buf[i];
+
+            return s_utf8.GetString(s_utf8Buffer, 0, data->BufTextLen);
+        }
+
+        private static unsafe void WriteToImGuiInputBuffer(ImGuiInputTextCallbackData* data, string value)
+        {
+            value ??= string.Empty;
+
+            // Encode into reusable buffer.
+            var maxBytes = data->BufSize > 0 ? data->BufSize - 1 : 0;
+            var byteCount = s_utf8.GetByteCount(value);
+
+            if (s_utf8Buffer.Length < byteCount)
+                s_utf8Buffer = new byte[Mathf.NextPowerOfTwo(byteCount)];
+
+            var bytesWritten = s_utf8.GetBytes(value, 0, value.Length, s_utf8Buffer, 0);
+            var writeLen = Math.Min(bytesWritten, maxBytes);
+
+            fixed (byte* src = s_utf8Buffer)
+            {
+                Buffer.MemoryCopy(src, data->Buf, data->BufSize, writeLen);
+            }
+
+            if (data->BufSize > 0)
+                data->Buf[writeLen] = 0;
+
+            data->BufTextLen = writeLen;
+            data->CursorPos = writeLen;
+            data->SelectionStart = writeLen;
+            data->SelectionEnd = writeLen;
+            data->BufDirty = 1;
         }
 
         private static void PushHistory(string line)
@@ -370,7 +527,7 @@ namespace UnityEssentials
             if (s_history.Count > 50)
                 s_history.RemoveAt(0);
 
-            s_historyIndex = -1;
+            s_inputState.HistoryIndex = -1;
         }
 
         private static string GetCommandQuery(string currentLine)
@@ -383,23 +540,18 @@ namespace UnityEssentials
             return (space < 0 ? trimmed : trimmed.Substring(0, space)).Trim();
         }
 
-        private static void ApplySuggestion(int index)
+        private static string ReplaceCommandToken(string input, string command)
         {
-            if (index < 0 || index >= s_suggestions.Count)
-                return;
+            input ??= string.Empty;
 
-            var cmd = s_suggestions[index].Name;
+            var leading = input.Length - input.TrimStart().Length;
+            var trimmed = input.TrimStart();
 
-            // Replace first token only, preserve args.
-            var existing = s_input ?? string.Empty;
-            var leadingSpaces = existing.Length - existing.TrimStart().Length;
-            var trimmed = existing.TrimStart();
             var space = trimmed.IndexOf(' ');
             var args = space < 0 ? string.Empty : trimmed.Substring(space);
 
-            s_input = new string(' ', leadingSpaces) + cmd + args;
+            return new string(' ', leading) + command + args;
         }
-
 
         private static System.Numerics.Vector4? GetColor(ConsoleSeverity sev)
         {
@@ -414,3 +566,4 @@ namespace UnityEssentials
         }
     }
 }
+
