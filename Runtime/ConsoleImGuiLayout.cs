@@ -10,7 +10,7 @@ namespace UnityEssentials
         // Keep these as one-stop knobs for positioning/sizing.
         private const float OverlayAnchorRatioY = 5f / 6f;           // Window bottom is anchored at this fraction of the work-rect height.
         private const float OverlayWidthRatio = 2f / 3f;             // Default width is this fraction of the work-rect width.
-        private const float OverlayMinWidth = 420f;
+        private const float OverlayMinWidth = 220f;
         private const float OverlayMaxWidth = 900f;
 
         private const float OverlayBodyHeightRatio = 0.45f;          // When body is visible (not input-only).

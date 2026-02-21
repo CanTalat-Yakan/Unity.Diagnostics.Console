@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -220,6 +221,106 @@ namespace UnityEssentials
             var s = SceneManager.GetActiveScene();
             SceneManager.LoadScene(s.buildIndex);
             return $"Reloading active scene (buildIndex={s.buildIndex}, name={s.name})...";
+        }
+
+        [Console("console.imgui.demo", "Toggles ImGui demo window.")]
+        private static void ToggleImGuiDemoWindow() =>
+            ConsoleImGui.DemoWindow = !ConsoleImGui.DemoWindow;
+
+        [Console("console.world", "Prints loaded scenes and full hierarchy into the console log. Usage: console.world [maxNodes] [maxDepth]")]
+        private static string PrintWorldInfo()
+        {
+            var maxNodes = 5000;
+            var maxDepth = 32;
+
+            var sb = new StringBuilder(64 * 1024);
+            sb.AppendLine($"Scenes loaded: {SceneManager.sceneCount}");
+
+            var printedNodes = 0;
+            var truncated = false;
+
+            static void AppendIndent(StringBuilder b, int depth)
+            {
+                // 2 spaces per level
+                for (var i = 0; i < depth; i++)
+                    b.Append("  ");
+            }
+
+            void AppendTransformTree(Transform t, int depth)
+            {
+                if (t == null || truncated)
+                    return;
+
+                if (depth > maxDepth)
+                {
+                    AppendIndent(sb, depth);
+                    sb.AppendLine("<maxDepth reached>");
+                    return;
+                }
+
+                printedNodes++;
+                if (printedNodes > maxNodes)
+                {
+                    truncated = true;
+                    return;
+                }
+
+                AppendIndent(sb, depth);
+                var go = t.gameObject;
+                sb.Append(go != null ? go.name : "<null>");
+
+                if (go != null && !go.activeSelf)
+                    sb.Append(" [inactive]");
+
+                sb.AppendLine();
+
+                // Children
+                var childCount = t.childCount;
+                for (var i = 0; i < childCount; i++)
+                    AppendTransformTree(t.GetChild(i), depth + 1);
+            }
+
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var s = SceneManager.GetSceneAt(i);
+                if (!s.IsValid())
+                    continue;
+
+                var rootCount = 0;
+                try { rootCount = s.rootCount; }
+                catch { }
+
+                sb.AppendLine();
+                sb.AppendLine($"[{i}] {s.name}");
+                sb.AppendLine($"  buildIndex: {s.buildIndex}");
+                sb.AppendLine($"  loaded: {s.isLoaded} active: {s == SceneManager.GetActiveScene()}");
+                sb.AppendLine($"  roots: {rootCount}");
+
+                GameObject[] roots = Array.Empty<GameObject>();
+                try { roots = s.GetRootGameObjects(); }
+                catch { }
+
+                for (var r = 0; r < roots.Length; r++)
+                {
+                    if (truncated)
+                        break;
+
+                    var go = roots[r];
+                    if (go == null)
+                        continue;
+
+                    AppendTransformTree(go.transform, depth: 0);
+                }
+
+                if (truncated)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"<output truncated after {maxNodes} nodes>");
+                    break;
+                }
+            }
+
+            return sb.ToString().TrimEnd();
         }
     }
 }

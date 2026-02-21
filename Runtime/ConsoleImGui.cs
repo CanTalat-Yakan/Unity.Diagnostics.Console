@@ -10,6 +10,8 @@ namespace UnityEssentials
 
         public static bool Collapse = true;
 
+        public static bool DemoWindow = false;
+
         // Shared UI state (history, suggestions, selection, input rect, input buffer).
         private static readonly ConsoleImGuiContext s_ctx = new()
         {
@@ -27,6 +29,9 @@ namespace UnityEssentials
             if (!scope.Active)
                 return;
 
+            if (DemoWindow)
+                ImGui.ShowDemoWindow();
+            
             var data = ConsoleHost.Data;
             data.Config.CollapseDuplicates = Collapse;
 

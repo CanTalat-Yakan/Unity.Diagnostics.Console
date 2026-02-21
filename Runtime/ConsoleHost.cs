@@ -1,27 +1,29 @@
 using System.Collections.Concurrent;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace UnityEssentials
 {
     public sealed class ConsoleHost : GlobalSingleton<ConsoleHost>
     {
-        public static bool Enabled { get; set; } = true;
+        public static bool Enabled { get; set; } = false;
+        public Key ToggleKey = Key.F1;
 
         internal static readonly ConsoleData Data = new();
         internal static readonly ConsoleCommandRegistry Commands = new();
 
         private static readonly ConcurrentQueue<(string Condition, string StackTrace, LogType Type)> s_logQueue = new();
-        
+
         private bool _hooked;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize() =>
             Commands.RegisterFromLoadedAssemblies();
 
-        private void OnEnable() => 
+        private void OnEnable() =>
             EnsureHooked();
-        
-        private void OnDisable() => 
+
+        private void OnDisable() =>
             Unhook();
 
         protected override void OnDestroy()
@@ -32,11 +34,15 @@ namespace UnityEssentials
 
         private void Update()
         {
+            if(Keyboard.current != null)
+                if(ToggleKey != Key.None && Keyboard.current[ToggleKey].wasPressedThisFrame)
+                    Enabled = !Enabled;
+
             if (!Enabled)
                 return;
 
             DrainLogsIntoBuffer();
-            
+
             ConsoleImGui.DrawImGui();
         }
 
@@ -61,7 +67,7 @@ namespace UnityEssentials
 
         private static void OnLog(string condition, string stackTrace, LogType type) =>
             s_logQueue.Enqueue((condition, stackTrace, type));
-        
+
         private static void DrainLogsIntoBuffer()
         {
             // Resize if MaxEntries changed.

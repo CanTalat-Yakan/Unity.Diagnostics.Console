@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using ImGuiNET;
 
 namespace UnityEssentials
@@ -16,7 +17,7 @@ namespace UnityEssentials
 
                 // Log output.
                 var avail = ImGui.GetContentRegionAvail();
-                var bodySize = new System.Numerics.Vector2(avail.X, MathF.Max(50, avail.Y - footerHeight));
+                var bodySize = new Vector2(avail.X, MathF.Max(50, avail.Y - footerHeight));
                 DrawLogList(data, bodySize, ctx.Collapse);
 
                 ImGui.Separator();
@@ -25,60 +26,48 @@ namespace UnityEssentials
             ConsoleImGuiDrawInputBar.DrawImGui(ctx);
             ConsoleImGuiDrawFlyout.DrawImGui(ctx);
 
-            // Keep query bookkeeping here (the orchestrator).
             if (!ctx.InputState.UserEdited)
                 ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input);
         }
 
-        private static unsafe void DrawLogList(ConsoleData data, System.Numerics.Vector2 bodySize, bool collapse)
+        private static void DrawLogList(ConsoleData data, Vector2 bodySize, bool collapse)
         {
             ImGui.BeginChild(LogBodyChildId, bodySize, ImGuiChildFlags.None, ImGuiWindowFlags.None);
-
             ImGui.PushTextWrapPos(0);
 
-            // Only draw visible rows.
+            // Filtered list of newest-offset indices.
             var visibleIndices = ConsoleImGuiUtilities.GetVisibleIndices(data);
-
-            var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
-            clipper.Begin(visibleIndices.Count);
-
-            while (clipper.Step())
-            {
-                for (var row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
-                {
-                    var idx = visibleIndices[row];
-                    var entry = data.GetNewest(idx);
-
-                    var color = ConsoleImGuiUtilities.GetColor(entry.Severity);
-                    if (color.HasValue)
-                        ImGui.PushStyleColor(ImGuiCol.Text, color.Value);
-
-                    // Show the message; add a count suffix only when collapsing duplicates.
-                    ImGui.TextUnformatted(entry.Message + (collapse && entry.Count > 1 ? $" (x{entry.Count})" : string.Empty));
-
-                    if (color.HasValue)
-                        ImGui.PopStyleColor();
-
-                    if (!string.IsNullOrEmpty(entry.StackTrace))
-                    {
-                        ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.65f, 0.65f, 0.65f, 1f));
-                        ImGui.TextUnformatted(entry.StackTrace);
-                        ImGui.PopStyleColor();
-                    }
-                }
-            }
-
-            clipper.End();
-            clipper.Destroy();
+            for (var row = 0; row < visibleIndices.Count; row++)
+                DrawRow(data, visibleIndices[row], collapse);
 
             ImGui.PopTextWrapPos();
+            ImGui.EndChild();
+        }
 
-            // Auto-scroll only when we're already at the bottom.
+        private static void DrawRow(ConsoleData data, int newestOffset, bool collapse)
+        {
+            var entry = data.GetNewest(newestOffset);
+
+            var color = ConsoleImGuiUtilities.GetColor(entry.Severity);
+            if (color.HasValue)
+                ImGui.PushStyleColor(ImGuiCol.Text, color.Value);
+
+            // Show the message; add a count suffix only when collapsing duplicates.
+            ImGui.TextUnformatted(entry.Message + (collapse && entry.Count > 1 ? $" (x{entry.Count})" : string.Empty));
+
+            if (color.HasValue)
+                ImGui.PopStyleColor();
+
+            if (!string.IsNullOrEmpty(entry.StackTrace))
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.65f, 0.65f, 0.65f, 1f));
+                ImGui.TextUnformatted(entry.StackTrace);
+                ImGui.PopStyleColor();
+            }
+
             var atBottom = ImGui.GetScrollY() >= ImGui.GetScrollMaxY() - ImGui.GetTextLineHeight();
             if (atBottom)
                 ImGui.SetScrollHereY(1f);
-
-            ImGui.EndChild();
         }
     }
 }

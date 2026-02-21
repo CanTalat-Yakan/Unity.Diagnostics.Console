@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Collections.Generic;
 
 namespace UnityEssentials
@@ -20,8 +21,8 @@ namespace UnityEssentials
 
         public readonly ConsoleImGuiDrawInputBar.InputState InputState = new();
 
-        public System.Numerics.Vector2 InputRectMin;
-        public System.Numerics.Vector2 InputRectMax;
+        public Vector2 InputRectMin;
+        public Vector2 InputRectMax;
         public bool HasInputRect;
 
         public void BeginFrame() =>
