@@ -32,17 +32,17 @@ namespace UnityEssentials
                 : "Commands: " + string.Join(", ", list);
         }
 
-        [Console("header", "Toggles console header. Usage: header <on/off>")]
-        private static void ShowConsoleHeader(bool header) => 
-            ConsoleImGui.Header = header;
+        [Console("console.header", "Toggles console header.")]
+        private static void ShowConsoleHeader() => 
+            ConsoleImGui.Header = !ConsoleImGui.Header;
         
-        [Console("body", "Toggles console body. Usage: body <on/off>")]
-        private static void ShowConsoleBody(bool body) => 
-            ConsoleImGui.Body = body;
+        [Console("console.body", "Toggles console body.")]
+        private static void ShowConsoleBody() => 
+            ConsoleImGui.Body = !ConsoleImGui.Body;
         
-        [Console("collapse", "Toggles log collapsing. Usage: collapse <on/off>")]
-        private static void CollapseConsole(bool collapse) => 
-            ConsoleImGui.Collapse = collapse;
+        [Console("console.collapse", "Toggles log collapsing.")]
+        private static void CollapseConsole() => 
+            ConsoleImGui.Collapse = !ConsoleImGui.Collapse;
         
         [Console("clear", "Clears the console log")]
         private static void Clear()
