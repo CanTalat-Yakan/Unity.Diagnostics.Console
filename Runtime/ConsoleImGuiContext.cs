@@ -18,7 +18,7 @@ namespace UnityEssentials
         public int SuggestionIndex = -1;
         public bool RequestFocusInput;
 
-        public readonly ConsoleImGuiDrawInputBar.InputState Input = new();
+        public readonly ConsoleImGuiDrawInputBar.InputState InputState = new();
 
         public System.Numerics.Vector2 InputRectMin;
         public System.Numerics.Vector2 InputRectMax;

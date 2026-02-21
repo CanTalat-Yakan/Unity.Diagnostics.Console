@@ -69,7 +69,7 @@ namespace UnityEssentials
                 ConsoleImGuiLayout.ClampToWorkArea(layout.WorkPos, layout.WorkSize);
             }
 
-            ConsoleImGuiDrawBody.DrawLogBodyWithFixedInput(data, s_ctx);
+            ConsoleImGuiDrawBody.DrawImGui(data, s_ctx);
 
             ImGui.End();
         }
@@ -87,19 +87,19 @@ namespace UnityEssentials
 
         internal static void UpdateSuggestions(ConsoleImGuiContext ctx, string input, bool force)
         {
-            if (!force && !ctx.Input.UserEdited)
+            if (!force && !ctx.InputState.UserEdited)
             {
-                ctx.Input.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(input);
+                ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(input);
                 ctx.Suggestions.Clear();
                 ctx.SuggestionIndex = -1;
                 return;
             }
 
             var query = ConsoleImGuiUtilities.GetCommandQuery(input);
-            if (!force && string.Equals(query, ctx.Input.LastQuery, StringComparison.Ordinal))
+            if (!force && string.Equals(query, ctx.InputState.LastQuery, StringComparison.Ordinal))
                 return;
 
-            ctx.Input.LastQuery = query;
+            ctx.InputState.LastQuery = query;
 
             // Try to keep the currently selected entry.
             var previousSelectedName = (ctx.SuggestionIndex >= 0 && ctx.SuggestionIndex < ctx.Suggestions.Count)
@@ -160,7 +160,7 @@ namespace UnityEssentials
             if (ctx.History.Count > 50)
                 ctx.History.RemoveAt(0);
 
-            ctx.Input.HistoryIndex = -1;
+            ctx.InputState.HistoryIndex = -1;
         }
     }
 }

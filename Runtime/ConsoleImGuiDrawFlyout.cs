@@ -9,16 +9,16 @@ namespace UnityEssentials
         internal const string SuggestionsScrollId = "##console_suggestions_scroll";
         internal const int MaxVisible = 6;
 
-        internal static void DrawSuggestionsFlyout(ConsoleImGuiContext ctx)
+        internal static void DrawImGui(ConsoleImGuiContext ctx)
         {
             // No suggestions to show.
-            if (!ctx.Input.UserEdited)
+            if (!ctx.InputState.UserEdited)
                 return;
 
             if (ctx.Suggestions.Count == 0)
                 return;
 
-            if (string.IsNullOrWhiteSpace(ConsoleImGuiUtilities.GetCommandQuery(ctx.Input.Input)))
+            if (string.IsNullOrWhiteSpace(ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input)))
                 return;
 
             if (!ctx.HasInputRect)

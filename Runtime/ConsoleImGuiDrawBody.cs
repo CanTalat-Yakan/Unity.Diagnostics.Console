@@ -7,7 +7,7 @@ namespace UnityEssentials
     {
         internal const string LogBodyChildId = "##console_body";
 
-        internal static void DrawLogBodyWithFixedInput(ConsoleData data, ConsoleImGuiContext ctx)
+        internal static void DrawImGui(ConsoleData data, ConsoleImGuiContext ctx)
         {
             if (ctx.Body)
             {
@@ -22,14 +22,12 @@ namespace UnityEssentials
                 ImGui.Separator();
             }
 
-            ConsoleImGuiDrawInputBar.Draw(ctx, ConsoleHost.TryExecuteLine);
-
-            // Draw the suggestions flyout over the input.
-            ConsoleImGuiDrawFlyout.DrawSuggestionsFlyout(ctx);
+            ConsoleImGuiDrawInputBar.DrawImGui(ctx);
+            ConsoleImGuiDrawFlyout.DrawImGui(ctx);
 
             // Keep query bookkeeping here (the orchestrator).
-            if (!ctx.Input.UserEdited)
-                ctx.Input.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.Input.Input);
+            if (!ctx.InputState.UserEdited)
+                ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input);
         }
 
         private static unsafe void DrawLogList(ConsoleData data, System.Numerics.Vector2 bodySize, bool collapse)
