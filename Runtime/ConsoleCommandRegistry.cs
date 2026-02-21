@@ -25,7 +25,7 @@ namespace UnityEssentials
 
         private readonly Dictionary<string, Command> _commands = new(StringComparer.OrdinalIgnoreCase);
 
-        // Cache a stable sorted view for UI/autocomplete. Rebuilt only when registry changes.
+        // Sorted list for UI/autocomplete (rebuilt only when the registry changes).
         private readonly List<Command> _sortedCommands = new(128);
 
         public IEnumerable<Command> AllCommands => _commands.Values;
@@ -70,7 +70,7 @@ namespace UnityEssentials
                             if (!TryCreateCommand(method, attr, out var cmd))
                                 continue;
 
-                            // First one wins – barebones behavior.
+                            // Collision policy: first one wins.
                             if (!_commands.ContainsKey(cmd.Name))
                                 _commands[cmd.Name] = cmd;
                         }
@@ -78,7 +78,7 @@ namespace UnityEssentials
                 }
             }
 
-            // Build a sorted view once.
+            // Build the sorted view.
             _sortedCommands.AddRange(_commands.Values);
             _sortedCommands.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name));
         }
@@ -109,7 +109,7 @@ namespace UnityEssentials
                 return false;
             }
 
-            // allow void or string return
+            // Allow void or string return types.
             if (method.ReturnType != typeof(void) && method.ReturnType != typeof(string))
                 return false;
 

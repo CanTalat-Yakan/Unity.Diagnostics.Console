@@ -32,17 +32,21 @@ namespace UnityEssentials
                 : "Commands: " + string.Join(", ", list);
         }
 
-        [Console("console.header", "Toggles console header.")]
-        private static void ShowConsoleHeader() => 
-            ConsoleImGui.Header = !ConsoleImGui.Header;
-        
-        [Console("console.body", "Toggles console body.")]
-        private static void ShowConsoleBody() => 
-            ConsoleImGui.Body = !ConsoleImGui.Body;
+        [Console("console.enable", "Toggles the console.")]
+        private static void ToggleConsole() => 
+            ConsoleHost.Enabled = !ConsoleHost.Enabled;
         
         [Console("console.collapse", "Toggles log collapsing.")]
         private static void CollapseConsole() => 
             ConsoleImGui.Collapse = !ConsoleImGui.Collapse;
+
+        [Console("console.header", "Toggles console header.")]
+        private static void ToggleConsoleHeader() => 
+            ConsoleImGui.Header = !ConsoleImGui.Header;
+
+        [Console("console.body", "Toggles console body.")]
+        private static void ToggleConsoleBody() => 
+            ConsoleImGui.Body = !ConsoleImGui.Body;
         
         [Console("clear", "Clears the console log")]
         private static void Clear()
@@ -75,7 +79,7 @@ namespace UnityEssentials
             if (!float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
                 return "Invalid number";
 
-            Time.timeScale = Mathf.Max(0f, v);
+            Time.timeScale = MathF.Max(0f, v);
             return $"Time.timeScale = {Time.timeScale}";
         }
 

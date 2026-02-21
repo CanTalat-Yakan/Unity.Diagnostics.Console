@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Concurrent;
 using UnityEngine;
 
@@ -65,7 +64,7 @@ namespace UnityEssentials
         
         private static void DrainLogsIntoBuffer()
         {
-            // Resize if user changed max entries.
+            // Resize if MaxEntries changed.
             Data.Resize(Data.Config.MaxEntries);
 
             while (s_logQueue.TryDequeue(out var msg))
@@ -106,7 +105,7 @@ namespace UnityEssentials
 
             var ok = Commands.TryExecute(cmdName, args, out var result);
 
-            // Echo command.
+            // Echo the command.
             Print($"> {trimmed}");
 
             if (!string.IsNullOrWhiteSpace(result))

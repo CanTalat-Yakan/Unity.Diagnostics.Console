@@ -70,14 +70,14 @@ namespace UnityEssentials
 
         public void Resize(int maxEntries)
         {
-            maxEntries = Mathf.Clamp(maxEntries, 32, 20000);
+            maxEntries = Math.Clamp(maxEntries, 32, 20000);
 
             if (_buffer.Length == maxEntries)
                 return;
 
-            // Keep newest entries.
+            // Keep the newest entries.
             var newBuf = new ConsoleEntry[maxEntries];
-            var keep = Mathf.Min(_count, maxEntries);
+            var keep = Math.Min(_count, maxEntries);
             for (var i = 0; i < keep; i++)
             {
                 var entry = GetEntryFromNewestOffset(keep - 1 - i);
@@ -109,7 +109,7 @@ namespace UnityEssentials
             message ??= string.Empty;
             stackTrace ??= string.Empty;
 
-            // Coalesce duplicates at tail (newest), when enabled.
+            // If enabled, coalesce duplicates at the newest end.
             if (collapseDuplicates && _count > 0)
             {
                 var newest = GetEntryFromNewestOffset(0);
@@ -143,7 +143,7 @@ namespace UnityEssentials
 
             _buffer[_nextWrite] = entry;
             _nextWrite = (_nextWrite + 1) % _buffer.Length;
-            _count = Mathf.Min(_count + 1, _buffer.Length);
+            _count = Math.Min(_count + 1, _buffer.Length);
         }
 
         public ConsoleEntry GetNewest(int newestOffset)
@@ -156,7 +156,7 @@ namespace UnityEssentials
 
         private ConsoleEntry GetEntryFromNewestOffset(int newestOffset)
         {
-            // newestOffset 0 => newest
+            // newestOffset: 0 = newest
             var idx = (_nextWrite - 1 - newestOffset);
             while (idx < 0) idx += _buffer.Length;
             return _buffer[idx];
@@ -171,7 +171,7 @@ namespace UnityEssentials
             if (string.IsNullOrWhiteSpace(search))
                 return true;
 
-            // Case-insensitive contains.
+            // Case-insensitive substring search.
             return entry.Message?.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0
                    || entry.StackTrace?.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
         }
