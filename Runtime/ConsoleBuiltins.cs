@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UnityEssentials
 {
@@ -69,7 +70,83 @@ namespace UnityEssentials
         private static void Log(string args) =>
             Debug.Log(args ?? string.Empty);
 
-        [Console("timescale", "Gets/sets Time.timeScale. Usage: timescale or timescale <float>")]
+        [Console("gc", "Forces a GC.Collect")]
+        private static void Gc()
+        {
+            GC.Collect();
+            ConsoleHost.Print("GC.Collect() called");
+        }
+
+        [Console("application.info", "Prints basic Application info.")]
+        private static string ApplicationInfo()
+        {
+            return string.Join("\n", new[]
+            {
+                $"productName: {Application.productName}",
+                $"version: {Application.version}",
+                $"unityVersion: {Application.unityVersion}",
+                $"platform: {Application.platform}",
+                $"identifier: {Application.identifier}",
+                $"dataPath: {Application.dataPath}",
+                $"persistentDataPath: {Application.persistentDataPath}",
+                $"isEditor: {Application.isEditor}",
+                $"isPlaying: {Application.isPlaying}",
+                $"runInBackground: {Application.runInBackground}",
+                $"targetFrameRate: {Application.targetFrameRate}",
+            });
+        }
+
+        [Console("application.targetframerate", "Gets/sets Application.targetFrameRate. Usage: application.targetframerate or application.targetframerate <int>")]
+        private static string TargetFrameRate(string args)
+        {
+            args = (args ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(args))
+                return $"Application.targetFrameRate = {Application.targetFrameRate}";
+
+            if (!int.TryParse(args, out var v))
+                return "Invalid integer";
+
+            Application.targetFrameRate = v;
+            return $"Application.targetFrameRate = {Application.targetFrameRate}";
+        }
+
+        [Console("application.quit", "Quits the application (no-op in Editor). Usage: application.quit or application.quit <exitCode>")]
+        private static void Quit(string args)
+        {
+            args = (args ?? string.Empty).Trim();
+            var exitCode = 0;
+            if (!string.IsNullOrEmpty(args) && !int.TryParse(args, out exitCode))
+            {
+                ConsoleHost.Print("Invalid exit code; using 0");
+                exitCode = 0;
+            }
+
+#if UNITY_EDITOR
+            // Keep it a no-op in the editor to avoid accidentally stopping play mode.
+            ConsoleHost.Print("Application.Quit is ignored in the Unity Editor");
+#else
+            Application.Quit(exitCode);
+#endif
+        }
+
+        [Console("time.info", "Prints common Time values.")]
+        private static string TimeInfo()
+        {
+            return string.Join("\n", new[]
+            {
+                $"timeScale: {Time.timeScale}",
+                $"deltaTime: {Time.deltaTime}",
+                $"unscaledDeltaTime: {Time.unscaledDeltaTime}",
+                $"time: {Time.time}",
+                $"unscaledTime: {Time.unscaledTime}",
+                $"realtimeSinceStartup: {Time.realtimeSinceStartup}",
+                $"frameCount: {Time.frameCount}",
+                $"fixedDeltaTime: {Time.fixedDeltaTime}",
+                $"smoothDeltaTime: {Time.smoothDeltaTime}",
+            });
+        }
+
+        [Console("time.timeScale", "Gets/sets Time.timeScale. Usage: timescale or timescale <float>")]
         private static string TimeScale(string args)
         {
             args = (args ?? string.Empty).Trim();
@@ -83,11 +160,66 @@ namespace UnityEssentials
             return $"Time.timeScale = {Time.timeScale}";
         }
 
-        [Console("gc", "Forces a GC.Collect")]
-        private static void Gc()
+        [Console("time.fixedDeltaTime", "Gets/sets Time.fixedDeltaTime. Usage: time.fixedDeltaTime or time.fixedDeltaTime <float>")]
+        private static string FixedDeltaTime(string args)
         {
-            GC.Collect();
-            ConsoleHost.Print("GC.Collect() called");
+            args = (args ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(args))
+                return $"Time.fixedDeltaTime = {Time.fixedDeltaTime}";
+
+            if (!float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
+                return "Invalid number";
+
+            Time.fixedDeltaTime = MathF.Max(0f, v);
+            return $"Time.fixedDeltaTime = {Time.fixedDeltaTime}";
+        }
+
+        [Console("scene.list", "Lists loaded scenes and their build indices.")]
+        private static string SceneList()
+        {
+            if (SceneManager.sceneCount == 0)
+                return "No scenes loaded";
+
+            var lines = new string[SceneManager.sceneCount];
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var s = SceneManager.GetSceneAt(i);
+                lines[i] = $"[{i}] name={s.name} buildIndex={s.buildIndex} path={s.path} loaded={s.isLoaded} active={(s == SceneManager.GetActiveScene())}";
+            }
+
+            return string.Join("\n", lines);
+        }
+
+        [Console("scene.active", "Prints the active scene.")]
+        private static string SceneActive()
+        {
+            var s = SceneManager.GetActiveScene();
+            return $"activeScene: name={s.name} buildIndex={s.buildIndex} path={s.path} loaded={s.isLoaded}";
+        }
+
+        [Console("scene.load", "Loads a scene by build index or name. Usage: scene.load <index|name>")]
+        private static string SceneLoad(string args)
+        {
+            args = (args ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(args))
+                return "Usage: scene.load <index|name>";
+
+            if (int.TryParse(args, out var buildIndex))
+            {
+                SceneManager.LoadScene(buildIndex);
+                return $"Loading scene index {buildIndex}...";
+            }
+
+            SceneManager.LoadScene(args);
+            return $"Loading scene '{args}'...";
+        }
+
+        [Console("scene.reload", "Reloads the active scene.")]
+        private static string SceneReload()
+        {
+            var s = SceneManager.GetActiveScene();
+            SceneManager.LoadScene(s.buildIndex);
+            return $"Reloading active scene (buildIndex={s.buildIndex}, name={s.name})...";
         }
     }
 }

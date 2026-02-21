@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -54,6 +55,43 @@ namespace UnityEssentials
                 ConsoleSeverity.Assert => new Vector4(1f, 0.6f, 0.6f, 1f),
                 _ => null
             };
+        }
+
+        private static bool IsCommandTokenSeparator(char c)
+        {
+            // Common separators used in command naming schemes.
+            // Add more here if you introduce other conventions.
+            return c == '.'
+                   || c == '_'
+                   || c == '-'
+                   || c == '/'
+                   || c == '\\'
+                   || c == ':';
+        }
+
+        internal static bool MatchesCommandQuery(string commandName, string query)
+        {
+            if (string.IsNullOrWhiteSpace(commandName) || string.IsNullOrWhiteSpace(query))
+                return false;
+
+            // 1) Regular prefix match (completes the command from the start).
+            if (commandName.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // 2) Token-boundary match: allow matching the start of a token after separators.
+            // Example: `quit` should suggest `application.quit`.
+            for (var j = 0; j < commandName.Length - 1; j++)
+            {
+                if (!IsCommandTokenSeparator(commandName[j]))
+                    continue;
+
+                var start = j + 1;
+                if (start < commandName.Length
+                    && commandName.AsSpan(start).StartsWith(query, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

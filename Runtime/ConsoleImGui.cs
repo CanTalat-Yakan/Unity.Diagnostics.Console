@@ -124,8 +124,9 @@ namespace UnityEssentials
                 if (string.Equals(cmd.Name, query, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (cmd.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase)
-                    || cmd.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                var name = cmd.Name;
+                var matches = ConsoleImGuiUtilities.MatchesCommandQuery(name, query);
+                if (matches)
                 {
                     ctx.Suggestions.Add(cmd);
                     if (ctx.Suggestions.Count >= 10)
