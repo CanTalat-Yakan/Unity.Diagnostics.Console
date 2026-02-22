@@ -9,6 +9,8 @@ namespace UnityEssentials
         public static bool Enabled { get; set; } = false;
         public Key ToggleKey = Key.F1;
 
+        public static bool DemoWindow = false;
+
         internal static readonly ConsoleData Data = new();
         internal static readonly ConsoleCommandRegistry Commands = new();
 
@@ -34,6 +36,10 @@ namespace UnityEssentials
 
         private void Update()
         {
+            using var scope = ImGuiScope.TryEnter();
+            if (scope.Active && DemoWindow)
+                ImGuiNET.ImGui.ShowDemoWindow();
+            
             if(Keyboard.current != null)
                 if(ToggleKey != Key.None && Keyboard.current[ToggleKey].wasPressedThisFrame)
                     Enabled = !Enabled;

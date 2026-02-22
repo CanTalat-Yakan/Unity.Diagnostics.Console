@@ -10,8 +10,6 @@ namespace UnityEssentials
 
         public static bool Collapse = true;
 
-        public static bool DemoWindow = false;
-
         // Shared UI state (history, suggestions, selection, input rect, input buffer).
         private static readonly ConsoleImGuiContext s_ctx = new()
         {
@@ -29,9 +27,6 @@ namespace UnityEssentials
             if (!scope.Active)
                 return;
 
-            if (DemoWindow)
-                ImGui.ShowDemoWindow();
-            
             var data = ConsoleHost.Data;
             data.Config.CollapseDuplicates = Collapse;
 
@@ -130,13 +125,33 @@ namespace UnityEssentials
                     continue;
 
                 var name = cmd.Name;
-                var matches = ConsoleImGuiUtilities.MatchesCommandQuery(name, query);
-                if (matches)
-                {
+                var match = ConsoleImGuiUtilities.MatchCommandQuery(name, query);
+                if (!match.IsMatch)
+                    continue;
+
+                // Prefer direct prefix matches before token (separator) matches.
+                if (match.IsPrefixMatch)
+                    ctx.Suggestions.Insert(0, cmd);
+                else
                     ctx.Suggestions.Add(cmd);
-                    if (ctx.Suggestions.Count >= 10)
-                        break;
-                }
+
+                if (ctx.Suggestions.Count >= 10)
+                    break;
+            }
+
+            // Re-stabilize: keep prefix matches first, then everything else, both groups alphabetical.
+            if (ctx.Suggestions.Count > 1)
+            {
+                ctx.Suggestions.Sort((a, b) =>
+                {
+                    var ma = ConsoleImGuiUtilities.MatchCommandQuery(a.Name, query);
+                    var mb = ConsoleImGuiUtilities.MatchCommandQuery(b.Name, query);
+
+                    var pa = ma.IsPrefixMatch ? 0 : 1;
+                    var pb = mb.IsPrefixMatch ? 0 : 1;
+                    var p = pa.CompareTo(pb);
+                    return p != 0 ? p : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
+                });
             }
 
             if (ctx.Suggestions.Count == 0)

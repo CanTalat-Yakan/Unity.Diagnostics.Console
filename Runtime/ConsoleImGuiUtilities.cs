@@ -60,7 +60,6 @@ namespace UnityEssentials
         private static bool IsCommandTokenSeparator(char c)
         {
             // Common separators used in command naming schemes.
-            // Add more here if you introduce other conventions.
             return c == '.'
                    || c == '_'
                    || c == '-'
@@ -69,17 +68,38 @@ namespace UnityEssentials
                    || c == ':';
         }
 
-        internal static bool MatchesCommandQuery(string commandName, string query)
+        internal readonly struct CommandMatch
+        {
+            public readonly bool IsMatch;
+            public readonly bool IsPrefixMatch;
+            public readonly bool IsTokenMatch;
+
+            public CommandMatch(bool isMatch, bool isPrefixMatch, bool isTokenMatch)
+            {
+                IsMatch = isMatch;
+                IsPrefixMatch = isPrefixMatch;
+                IsTokenMatch = isTokenMatch;
+            }
+
+            public static CommandMatch None => new(false, false, false);
+        }
+
+        internal static CommandMatch MatchCommandQuery(string commandName, string query)
         {
             if (string.IsNullOrWhiteSpace(commandName) || string.IsNullOrWhiteSpace(query))
-                return false;
+                return CommandMatch.None;
+
+            query = query.Trim();
+
+            // If the user starts with a token separator, show all commands.
+            if (query.Length > 0 && IsCommandTokenSeparator(query[0]))
+                return new CommandMatch(true, isPrefixMatch: true, isTokenMatch: false);
 
             // 1) Regular prefix match (completes the command from the start).
             if (commandName.StartsWith(query, StringComparison.OrdinalIgnoreCase))
-                return true;
+                return new CommandMatch(true, isPrefixMatch: true, isTokenMatch: false);
 
             // 2) Token-boundary match: allow matching the start of a token after separators.
-            // Example: `quit` should suggest `application.quit`.
             for (var j = 0; j < commandName.Length - 1; j++)
             {
                 if (!IsCommandTokenSeparator(commandName[j]))
@@ -88,10 +108,13 @@ namespace UnityEssentials
                 var start = j + 1;
                 if (start < commandName.Length
                     && commandName.AsSpan(start).StartsWith(query, StringComparison.OrdinalIgnoreCase))
-                    return true;
+                    return new CommandMatch(true, isPrefixMatch: false, isTokenMatch: true);
             }
 
-            return false;
+            return CommandMatch.None;
         }
+
+        internal static bool MatchesCommandQuery(string commandName, string query) =>
+            MatchCommandQuery(commandName, query).IsMatch;
     }
 }

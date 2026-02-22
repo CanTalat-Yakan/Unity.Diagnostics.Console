@@ -31,7 +31,7 @@ namespace UnityEssentials
 
             return list.Length == 0
                 ? "No commands loaded"
-                : "Commands: " + string.Join(", ", list);
+                : "Commands:\n" + string.Join("\n", list);
         }
 
         [Console("console.enable", "Toggles the console.")]
@@ -51,7 +51,7 @@ namespace UnityEssentials
             ConsoleImGui.Body = !ConsoleImGui.Body;
         
         [Console("clear", "Clears the console log")]
-        private static void Clear()
+        private static void ClearConsole()
         {
             ConsoleHost.Clear();
 
@@ -61,6 +61,41 @@ namespace UnityEssentials
             var clearMethod = logEntriesType?.GetMethod("Clear", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
             clearMethod?.Invoke(null, null);
 #endif
+        }
+
+        [Console("copy", "Copies the full console log to clipboard.")]
+        private static string CopyConsoleToClipboard()
+        {
+            var data = ConsoleHost.Data;
+            if (data == null || data.Count == 0)
+                return "Console is empty";
+
+            var sb = new StringBuilder(16 * 1024);
+
+            // Oldest -> newest
+            for (var i = data.Count - 1; i >= 0; i--)
+            {
+                var e = data.GetNewest(i);
+
+                sb.Append('[').Append(e.Severity).Append("] ");
+                if (e.Count > 1)
+                    sb.Append("(x").Append(e.Count).Append(") ");
+
+                sb.Append(e.Message ?? string.Empty);
+
+                if (!string.IsNullOrWhiteSpace(e.StackTrace))
+                {
+                    sb.AppendLine();
+                    sb.AppendLine(e.StackTrace.TrimEnd());
+                }
+
+                sb.AppendLine();
+            }
+
+            var text = sb.ToString().TrimEnd();
+            GUIUtility.systemCopyBuffer = text;
+
+            return $"Copied {data.Count} entries to clipboard";
         }
 
         [Console("echo", "Echoes arguments back. Usage: echo <text>")]
@@ -77,6 +112,21 @@ namespace UnityEssentials
             GC.Collect();
             ConsoleHost.Print("GC.Collect() called");
         }
+
+        [Console("quit", "Quits the application")]
+        private static void Quit()
+        {
+#if UNITY_EDITOR
+            if (Application.isPlaying)
+                UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        [Console("imgui.demo", "Toggles ImGui demo window.")]
+        private static void ToggleImGuiDemoWindow() =>
+            ConsoleHost.DemoWindow = !ConsoleHost.DemoWindow;
 
         [Console("application.info", "Prints basic Application info.")]
         private static string ApplicationInfo()
@@ -97,37 +147,14 @@ namespace UnityEssentials
             });
         }
 
-        [Console("application.targetframerate", "Gets/sets Application.targetFrameRate. Usage: application.targetframerate or application.targetframerate <int>")]
-        private static string TargetFrameRate(string args)
+        [Console("application.targetframerate", "Gets/sets Application.targetFrameRate")]
+        private static string TargetFrameRate(int? v)
         {
-            args = (args ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(args))
+            if (v == null)
                 return $"Application.targetFrameRate = {Application.targetFrameRate}";
 
-            if (!int.TryParse(args, out var v))
-                return "Invalid integer";
-
-            Application.targetFrameRate = v;
+            Application.targetFrameRate = v.Value;
             return $"Application.targetFrameRate = {Application.targetFrameRate}";
-        }
-
-        [Console("application.quit", "Quits the application (no-op in Editor). Usage: application.quit or application.quit <exitCode>")]
-        private static void Quit(string args)
-        {
-            args = (args ?? string.Empty).Trim();
-            var exitCode = 0;
-            if (!string.IsNullOrEmpty(args) && !int.TryParse(args, out exitCode))
-            {
-                ConsoleHost.Print("Invalid exit code; using 0");
-                exitCode = 0;
-            }
-
-#if UNITY_EDITOR
-            // Keep it a no-op in the editor to avoid accidentally stopping play mode.
-            ConsoleHost.Print("Application.Quit is ignored in the Unity Editor");
-#else
-            Application.Quit(exitCode);
-#endif
         }
 
         [Console("time.info", "Prints common Time values.")]
@@ -147,31 +174,23 @@ namespace UnityEssentials
             });
         }
 
-        [Console("time.timeScale", "Gets/sets Time.timeScale. Usage: timescale or timescale <float>")]
-        private static string TimeScale(string args)
+        [Console("time.timeScale", "Gets/sets Time.timeScale.")]
+        private static string TimeScale(float? v)
         {
-            args = (args ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(args))
+            if (v == null)
                 return $"Time.timeScale = {Time.timeScale}";
 
-            if (!float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
-                return "Invalid number";
-
-            Time.timeScale = MathF.Max(0f, v);
+            Time.timeScale = MathF.Max(0f, v.Value);
             return $"Time.timeScale = {Time.timeScale}";
         }
 
-        [Console("time.fixedDeltaTime", "Gets/sets Time.fixedDeltaTime. Usage: time.fixedDeltaTime or time.fixedDeltaTime <float>")]
-        private static string FixedDeltaTime(string args)
+        [Console("time.fixedDeltaTime", "Gets/sets Time.fixedDeltaTime.")]
+        private static string FixedDeltaTime(float? v)
         {
-            args = (args ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(args))
+            if (v == null)
                 return $"Time.fixedDeltaTime = {Time.fixedDeltaTime}";
 
-            if (!float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
-                return "Invalid number";
-
-            Time.fixedDeltaTime = MathF.Max(0f, v);
+            Time.fixedDeltaTime = MathF.Max(0f, v.Value);
             return $"Time.fixedDeltaTime = {Time.fixedDeltaTime}";
         }
 
@@ -198,7 +217,7 @@ namespace UnityEssentials
             return $"activeScene: name={s.name} buildIndex={s.buildIndex} path={s.path} loaded={s.isLoaded}";
         }
 
-        [Console("scene.load", "Loads a scene by build index or name. Usage: scene.load <index|name>")]
+        [Console("scene.load", "Loads a scene by build index or name.")]
         private static string SceneLoad(string args)
         {
             args = (args ?? string.Empty).Trim();
@@ -222,13 +241,9 @@ namespace UnityEssentials
             SceneManager.LoadScene(s.buildIndex);
             return $"Reloading active scene (buildIndex={s.buildIndex}, name={s.name})...";
         }
-
-        [Console("console.imgui.demo", "Toggles ImGui demo window.")]
-        private static void ToggleImGuiDemoWindow() =>
-            ConsoleImGui.DemoWindow = !ConsoleImGui.DemoWindow;
-
-        [Console("console.world", "Prints loaded scenes and full hierarchy into the console log. Usage: console.world [maxNodes] [maxDepth]")]
-        private static string PrintWorldInfo()
+        
+        [Console("scene.world", "Prints loaded scenes and full hierarchy into the console log.")]
+        private static string SceneWorldInfo()
         {
             var maxNodes = 5000;
             var maxDepth = 32;

@@ -13,13 +13,15 @@ namespace UnityEssentials
             public readonly string Description;
             public readonly MethodInfo Method;
             public readonly bool TakesArgs;
+            public readonly ParameterInfo[] Parameters;
 
-            public Command(string name, string description, MethodInfo method, bool takesArgs)
+            public Command(string name, string description, MethodInfo method, bool takesArgs, ParameterInfo[] parameters)
             {
                 Name = name;
                 Description = description;
                 Method = method;
                 TakesArgs = takesArgs;
+                Parameters = parameters;
             }
         }
 
@@ -102,11 +104,16 @@ namespace UnityEssentials
             }
             else if (parameters.Length == 1 && parameters[0].ParameterType == typeof(string))
             {
+                // Legacy mode: raw string args.
                 takesArgs = true;
             }
             else
             {
-                return false;
+                // New mode: bind tokens into typed parameters.
+                if (!ConsoleArgsBinder.CanBindParameters(parameters))
+                    return false;
+
+                takesArgs = true;
             }
 
             // Allow void or string return types.
@@ -118,7 +125,7 @@ namespace UnityEssentials
                 return false;
 
             var desc = attr?.Description ?? string.Empty;
-            cmd = new Command(name, desc, method, takesArgs);
+            cmd = new Command(name, desc, method, takesArgs, parameters);
             return true;
         }
 
@@ -135,10 +142,29 @@ namespace UnityEssentials
             try
             {
                 object ret;
-                if (cmd.TakesArgs)
-                    ret = cmd.Method.Invoke(null, new object[] { args ?? string.Empty });
-                else
+
+                var parameters = cmd.Parameters ?? Array.Empty<ParameterInfo>();
+
+                if (parameters.Length == 0)
+                {
                     ret = cmd.Method.Invoke(null, null);
+                }
+                else if (parameters.Length == 1 && parameters[0].ParameterType == typeof(string))
+                {
+                    // Legacy raw string passing.
+                    ret = cmd.Method.Invoke(null, new object[] { args ?? string.Empty });
+                }
+                else
+                {
+                    var bind = ConsoleArgsBinder.Bind(args ?? string.Empty, parameters);
+                    if (!bind.Ok)
+                    {
+                        result = bind.Error;
+                        return false;
+                    }
+
+                    ret = cmd.Method.Invoke(null, bind.Values);
+                }
 
                 result = ret as string ?? string.Empty;
                 return true;

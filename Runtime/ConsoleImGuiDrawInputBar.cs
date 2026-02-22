@@ -173,7 +173,7 @@ namespace UnityEssentials
                 return 0;
             }
 
-            if (data->EventFlag == ImGuiInputTextFlags.CallbackCompletion)
+            if (data->EventFlag == ImGuiInputTextFlags.CallbackCompletion || data->EventKey == ImGuiKey.Tab)
             {
                 var currentLine = ImGuiUtf8InputBuffer.Read(data);
                 ctx.InputState.Input = currentLine;

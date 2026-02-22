@@ -53,7 +53,7 @@ namespace UnityEssentials
 
             // Use a child so arrow-key navigation can keep the selection visible.
             ImGui.BeginChild(SuggestionsScrollId, Vector2.Zero, ImGuiChildFlags.None,
-                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoMouseInputs);
 
             for (var i = 0; i < ctx.Suggestions.Count; i++)
             {
