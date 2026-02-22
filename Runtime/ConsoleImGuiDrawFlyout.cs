@@ -65,7 +65,7 @@ namespace UnityEssentials
                     : $"{cmd.Name}  -  {cmd.Description}";
 
                 ImGui.PushID(i);
-                
+
                 ImGui.Selectable(display, isSelected);
 
                 // Keep the active item in view when moving with the arrow keys.

@@ -132,11 +132,7 @@ namespace UnityEssentials
                 // Prefer direct prefix matches before token (separator) matches.
                 if (match.IsPrefixMatch)
                     ctx.Suggestions.Insert(0, cmd);
-                else
-                    ctx.Suggestions.Add(cmd);
-
-                if (ctx.Suggestions.Count >= 10)
-                    break;
+                else ctx.Suggestions.Add(cmd);
             }
 
             // Re-stabilize: keep prefix matches first, then everything else, both groups alphabetical.
