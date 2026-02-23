@@ -1,12 +1,14 @@
 {
   "name": "com.unityessentials.diagnostics.console",
-  "version": "2.0.13",
+  "version": "2.0.14",
   "displayName": "Diagnostics Console",
   "description": "This is a part of the UnityEssentials Ecosystem",
   "unity": "6000.0",
   "unityRelease": "",
   "dependencies": {
+    "com.unity.inputsystem": "~1.18.0",
     "com.unityessentials.core.hdrp.imgui": "~2.0.0",
+    "com.unityessentials.systems.predefinedassembly": "~2.0.0",
     "com.unityessentials.systems.singleton": "~2.0.0"
   },
   "keywords": [],
