@@ -34,6 +34,10 @@ namespace UnityEssentials
                 : "Commands:\n" + string.Join("\n", list);
         }
 
+        [Console("imgui.demo", "Toggles ImGui demo window.")]
+        private static void ToggleImGuiDemoWindow() =>
+            ConsoleHost.DemoWindow = !ConsoleHost.DemoWindow;
+
         [Console("console.enable", "Toggles the console.")]
         private static void ToggleConsole() => 
             ConsoleHost.Enabled = !ConsoleHost.Enabled;
@@ -50,7 +54,7 @@ namespace UnityEssentials
         private static void ToggleConsoleBody() => 
             ConsoleImGui.Body = !ConsoleImGui.Body;
         
-        [Console("clear", "Clears the console log")]
+        [Console("console.clear", "Clears the console log")]
         private static void ClearConsole()
         {
             ConsoleHost.Clear();
@@ -63,7 +67,7 @@ namespace UnityEssentials
 #endif
         }
 
-        [Console("copy", "Copies the full console log to clipboard.")]
+        [Console("console.copy", "Copies the full console log to clipboard.")]
         private static string CopyConsoleToClipboard()
         {
             var data = ConsoleHost.Data;
@@ -98,22 +102,22 @@ namespace UnityEssentials
             return $"Copied {data.Count} entries to clipboard";
         }
 
-        [Console("echo", "Echoes arguments back. Usage: echo <text>")]
+        [Console("console.echo", "Echoes arguments back. Usage: echo <text>")]
         private static string Echo(string args) =>
             args ?? string.Empty;
         
-        [Console("log", "Logs message. Usage: log <text>")]
+        [Console("console.log", "Logs message. Usage: log <text>")]
         private static void Log(string args) =>
             Debug.Log(args ?? string.Empty);
 
-        [Console("gc", "Forces a GC.Collect")]
+        [Console("application.gc", "Forces a GC.Collect")]
         private static void Gc()
         {
             GC.Collect();
             ConsoleHost.Print("GC.Collect() called");
         }
 
-        [Console("quit", "Quits the application")]
+        [Console("application.quit", "Quits the application")]
         private static void Quit()
         {
 #if UNITY_EDITOR
@@ -123,11 +127,7 @@ namespace UnityEssentials
             Application.Quit();
 #endif
         }
-
-        [Console("imgui.demo", "Toggles ImGui demo window.")]
-        private static void ToggleImGuiDemoWindow() =>
-            ConsoleHost.DemoWindow = !ConsoleHost.DemoWindow;
-
+        
         [Console("application.info", "Prints basic Application info.")]
         private static string ApplicationInfo()
         {
@@ -145,16 +145,6 @@ namespace UnityEssentials
                 $"runInBackground: {Application.runInBackground}",
                 $"targetFrameRate: {Application.targetFrameRate}",
             });
-        }
-
-        [Console("application.targetframerate", "Gets/sets Application.targetFrameRate")]
-        private static string TargetFrameRate(int? v)
-        {
-            if (v == null)
-                return $"Application.targetFrameRate = {Application.targetFrameRate}";
-
-            Application.targetFrameRate = v.Value;
-            return $"Application.targetFrameRate = {Application.targetFrameRate}";
         }
 
         [Console("time.info", "Prints common Time values.")]
