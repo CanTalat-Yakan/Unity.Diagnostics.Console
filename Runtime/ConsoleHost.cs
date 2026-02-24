@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -105,6 +106,18 @@ namespace UnityEssentials
         public static void PrintError(string message) =>
             Data.Add(ConsoleSeverity.Error, message ?? string.Empty, string.Empty);
 
+        /// <summary>
+        /// Lightweight interception hook that can handle a command line before normal command dispatch.
+        /// Return true to stop processing (handled), false to continue with normal execution.
+        /// </summary>
+        private delegate bool PreDispatchHandler(string cmdName, string args, string fullLine, out bool ok);
+
+        // Note: Keep this list small and allocation-free. Order matters.
+        private static readonly PreDispatchHandler[] s_preDispatchHandlers =
+        {
+            TryHandleInlineHelp,
+        };
+
         public static bool TryExecuteLine(string line)
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -115,10 +128,16 @@ namespace UnityEssentials
             var cmdName = space < 0 ? trimmed : trimmed.Substring(0, space);
             var args = space < 0 ? string.Empty : trimmed.Substring(space + 1);
 
-            var ok = Commands.TryExecute(cmdName, args, out var result);
-
             // Echo the command.
             Print($"> {trimmed}");
+
+            // Give a chance for small, special-case handlers to run before normal dispatch.
+            // This keeps the main execution path clean and makes it easy to add new patterns later.
+            for (var i = 0; i < s_preDispatchHandlers.Length; i++)
+                if (s_preDispatchHandlers[i](cmdName, args, trimmed, out var preOk))
+                    return preOk;
+
+            var ok = Commands.TryExecute(cmdName, args, out var result);
 
             if (!string.IsNullOrWhiteSpace(result))
                 Print(result);
@@ -126,6 +145,31 @@ namespace UnityEssentials
                 PrintError($"Unknown command: {cmdName}");
 
             return ok;
+        }
+
+        private static bool TryHandleInlineHelp(string cmdName, string args, string fullLine, out bool ok)
+        {
+            ok = false;
+
+            // Inline help: '<command> help' prints that command's description.
+            // (Complements the 'help' builtin, and keeps the suggestion UI compact.)
+            if (string.IsNullOrWhiteSpace(cmdName))
+                return false;
+
+            if (!string.Equals((args ?? string.Empty).Trim(), "help", System.StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (Commands.TryGet(cmdName, out var cmd))
+            {
+                var desc = string.IsNullOrWhiteSpace(cmd.Description) ? "(no description)" : cmd.Description;
+                Print(desc);
+                ok = true;
+                return true;
+            }
+
+            PrintError($"Unknown command: {cmdName}");
+            ok = false;
+            return true;
         }
     }
 }

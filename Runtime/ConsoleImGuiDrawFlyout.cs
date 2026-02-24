@@ -60,9 +60,8 @@ namespace UnityEssentials
                 var cmd = ctx.Suggestions[i];
                 var isSelected = i == ctx.SuggestionIndex;
 
-                var display = string.IsNullOrWhiteSpace(cmd.Description)
-                    ? cmd.Name
-                    : $"{cmd.Name}  -  {cmd.Description}";
+                // Show command names only.
+                var display = cmd.Name;
 
                 ImGui.PushID(i);
 
