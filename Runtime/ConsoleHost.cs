@@ -7,8 +7,9 @@ namespace UnityEssentials
 {
     public sealed class ConsoleHost : GlobalSingleton<ConsoleHost>
     {
-        public static bool Enabled { get; set; } = false;
         public Key ToggleKey = Key.F1;
+        
+        public static bool Enabled { get; set; } = false;
 
         public static bool DemoWindow = false;
 
