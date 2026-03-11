@@ -4,9 +4,9 @@ using System.Numerics;
 
 namespace UnityEssentials
 {
-    internal static class ConsoleImGuiUtilities
+    public static class ConsoleUtilities
     {
-        internal static List<int> GetVisibleIndices(ConsoleData data)
+        public static List<int> GetVisibleIndices(ConsoleData data)
         {
             // Allocates a small list each frame; data.Count is capped and clipping keeps draw cost down.
             var indices = new List<int>(data.Count);
@@ -22,7 +22,7 @@ namespace UnityEssentials
             return indices;
         }
 
-        internal static string GetCommandQuery(string currentLine)
+        public static string GetCommandQuery(string currentLine)
         {
             if (string.IsNullOrWhiteSpace(currentLine))
                 return string.Empty;
@@ -32,7 +32,7 @@ namespace UnityEssentials
             return (space < 0 ? trimmed : trimmed.Substring(0, space)).Trim();
         }
 
-        internal static string ReplaceCommandToken(string input, string command)
+        public static string ReplaceCommandToken(string input, string command)
         {
             input ??= string.Empty;
 
@@ -45,7 +45,7 @@ namespace UnityEssentials
             return new string(' ', leading) + command + args;
         }
 
-        internal static Vector4? GetColor(ConsoleSeverity sev)
+        public static Vector4? GetColor(ConsoleSeverity sev)
         {
             return sev switch
             {
@@ -57,7 +57,7 @@ namespace UnityEssentials
             };
         }
 
-        private static bool IsCommandTokenSeparator(char c)
+        public static bool IsCommandTokenSeparator(char c)
         {
             // Common separators used in command naming schemes.
             return c == '.'
@@ -68,7 +68,7 @@ namespace UnityEssentials
                    || c == ':';
         }
 
-        internal readonly struct CommandMatch
+        public readonly struct CommandMatch
         {
             public readonly bool IsMatch;
             public readonly bool IsPrefixMatch;
@@ -84,7 +84,7 @@ namespace UnityEssentials
             public static CommandMatch None => new(false, false, false);
         }
 
-        internal static CommandMatch MatchCommandQuery(string commandName, string query)
+        public static CommandMatch MatchCommandQuery(string commandName, string query)
         {
             if (string.IsNullOrWhiteSpace(commandName) || string.IsNullOrWhiteSpace(query))
                 return CommandMatch.None;
@@ -114,7 +114,7 @@ namespace UnityEssentials
             return CommandMatch.None;
         }
 
-        internal static bool MatchesCommandQuery(string commandName, string query) =>
+        public static bool MatchesCommandQuery(string commandName, string query) =>
             MatchCommandQuery(commandName, query).IsMatch;
     }
 }

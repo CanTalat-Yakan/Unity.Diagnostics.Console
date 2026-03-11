@@ -27,7 +27,7 @@ namespace UnityEssentials
             ConsoleImGuiDrawFlyout.DrawImGui(ctx);
 
             if (!ctx.InputState.UserEdited)
-                ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input);
+                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
         }
 
         private static void DrawLogList(ConsoleData data, Vector2 bodySize, bool collapse)
@@ -36,7 +36,7 @@ namespace UnityEssentials
             ImGui.PushTextWrapPos(0);
 
             // Filtered list of newest-offset indices.
-            var visibleIndices = ConsoleImGuiUtilities.GetVisibleIndices(data);
+            var visibleIndices = ConsoleUtilities.GetVisibleIndices(data);
             for (var row = 0; row < visibleIndices.Count; row++)
                 DrawRow(data, visibleIndices[row], collapse);
 
@@ -48,7 +48,7 @@ namespace UnityEssentials
         {
             var entry = data.GetNewest(newestOffset);
 
-            var color = ConsoleImGuiUtilities.GetColor(entry.Severity);
+            var color = ConsoleUtilities.GetColor(entry.Severity);
             if (color.HasValue)
                 ImGui.PushStyleColor(ImGuiCol.Text, color.Value);
 

@@ -89,13 +89,13 @@ namespace UnityEssentials
         {
             if (!force && !ctx.InputState.UserEdited)
             {
-                ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(input);
+                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(input);
                 ctx.Suggestions.Clear();
                 ctx.SuggestionIndex = -1;
                 return;
             }
 
-            var query = ConsoleImGuiUtilities.GetCommandQuery(input);
+            var query = ConsoleUtilities.GetCommandQuery(input);
             if (!force && string.Equals(query, ctx.InputState.LastQuery, StringComparison.Ordinal))
                 return;
 
@@ -125,7 +125,7 @@ namespace UnityEssentials
                     continue;
 
                 var name = cmd.Name;
-                var match = ConsoleImGuiUtilities.MatchCommandQuery(name, query);
+                var match = ConsoleUtilities.MatchCommandQuery(name, query);
                 if (!match.IsMatch)
                     continue;
 
@@ -140,8 +140,8 @@ namespace UnityEssentials
             {
                 ctx.Suggestions.Sort((a, b) =>
                 {
-                    var ma = ConsoleImGuiUtilities.MatchCommandQuery(a.Name, query);
-                    var mb = ConsoleImGuiUtilities.MatchCommandQuery(b.Name, query);
+                    var ma = ConsoleUtilities.MatchCommandQuery(a.Name, query);
+                    var mb = ConsoleUtilities.MatchCommandQuery(b.Name, query);
 
                     var pa = ma.IsPrefixMatch ? 0 : 1;
                     var pb = mb.IsPrefixMatch ? 0 : 1;

@@ -110,7 +110,7 @@ namespace UnityEssentials
 
                 ConsoleImGui.UpdateSuggestions(ctx, currentLine, false);
 
-                var query = ConsoleImGuiUtilities.GetCommandQuery(currentLine);
+                var query = ConsoleUtilities.GetCommandQuery(currentLine);
                 var mode = ResolveNavigationMode(ctx, query);
 
                 if (mode == NavigationMode.Suggestions)
@@ -154,7 +154,7 @@ namespace UnityEssentials
                         ImGuiUtf8InputBuffer.Write(data, ctx.InputState.Input);
                         ctx.InputState.UserEdited = false;
                         ctx.Suggestions.Clear();
-                        ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input);
+                        ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
 
                         return 0;
                     }
@@ -168,7 +168,7 @@ namespace UnityEssentials
 
                 ctx.Suggestions.Clear();
                 ctx.SuggestionIndex = -1;
-                ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input);
+                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
 
                 return 0;
             }
@@ -186,9 +186,7 @@ namespace UnityEssentials
                 if (ctx.SuggestionIndex < 0)
                     ctx.SuggestionIndex = 0;
 
-                var completed =
-                    ConsoleImGuiUtilities.ReplaceCommandToken(currentLine,
-                        ctx.Suggestions[ctx.SuggestionIndex].Name);
+                var completed = ConsoleUtilities.ReplaceCommandToken(currentLine, ctx.Suggestions[ctx.SuggestionIndex].Name);
                 ImGuiUtf8InputBuffer.Write(data, completed);
 
                 ctx.InputState.Input = completed;
@@ -197,7 +195,7 @@ namespace UnityEssentials
 
                 ctx.Suggestions.Clear();
                 ctx.SuggestionIndex = -1;
-                ctx.InputState.LastQuery = ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input);
+                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
 
                 ctx.RequestFocusInput = true;
 

@@ -18,7 +18,7 @@ namespace UnityEssentials
             if (ctx.Suggestions.Count == 0)
                 return;
 
-            if (string.IsNullOrWhiteSpace(ConsoleImGuiUtilities.GetCommandQuery(ctx.InputState.Input)))
+            if (string.IsNullOrWhiteSpace(ConsoleUtilities.GetCommandQuery(ctx.InputState.Input)))
                 return;
 
             if (!ctx.HasInputRect)
