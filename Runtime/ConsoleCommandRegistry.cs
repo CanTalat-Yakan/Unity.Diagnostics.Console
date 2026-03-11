@@ -5,9 +5,9 @@ using UnityEngine;
 
 namespace UnityEssentials
 {
-    internal sealed class ConsoleCommandRegistry
+    public sealed class ConsoleCommandRegistry
     {
-        internal readonly struct Command
+        public readonly struct Command
         {
             public readonly string Name;
             public readonly string Description;

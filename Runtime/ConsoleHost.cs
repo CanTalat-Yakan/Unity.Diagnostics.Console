@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -13,8 +14,8 @@ namespace UnityEssentials
 
         public static bool DemoWindow = false;
 
-        internal static readonly ConsoleData Data = new();
-        internal static readonly ConsoleCommandRegistry Commands = new();
+        public static readonly ConsoleData Data = new();
+        public static readonly ConsoleCommandRegistry Commands = new();
 
         private static readonly ConcurrentQueue<(string Condition, string StackTrace, LogType Type)> s_logQueue = new();
 
@@ -22,6 +23,10 @@ namespace UnityEssentials
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize() =>
+            Commands.RegisterFromLoadedAssemblies();
+
+        [InitializeOnLoadMethod]
+        private static void InitializeEditor() =>
             Commands.RegisterFromLoadedAssemblies();
 
         private void OnEnable() =>

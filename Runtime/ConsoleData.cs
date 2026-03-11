@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace UnityEssentials
 {
-    internal enum ConsoleSeverity
+    public enum ConsoleSeverity
     {
         Log,
         Warning,
@@ -12,7 +12,7 @@ namespace UnityEssentials
         Assert,
     }
 
-    internal readonly struct ConsoleEntry
+    public readonly struct ConsoleEntry
     {
         public readonly int Index;
         public readonly float Time;
@@ -34,9 +34,9 @@ namespace UnityEssentials
         }
     }
 
-    internal sealed class ConsoleData
+    public sealed class ConsoleData
     {
-        internal sealed class Settings
+        public sealed class Settings
         {
             public int MaxEntries = 2000;
             public bool CaptureStackTracesForWarnings = false;
@@ -44,7 +44,7 @@ namespace UnityEssentials
             public bool CollapseDuplicates = true;
         }
 
-        internal sealed class Filters
+        public sealed class Filters
         {
             public bool ShowLog = true;
             public bool ShowWarning = true;
