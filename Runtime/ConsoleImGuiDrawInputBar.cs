@@ -8,22 +8,10 @@ namespace UnityEssentials
     {
         internal const string InputTextId = "##console_input";
 
-        internal sealed class InputState
-        {
-            public string Input = string.Empty;
-            public bool UserEdited;
-            public int HistoryIndex = -1;
-            public string LastQuery = string.Empty;
-        }
-
-        private enum NavigationMode
-        {
-            Suggestions,
-            History
-        }
-
         internal static unsafe void DrawImGui(ConsoleImGuiContext ctx)
         {
+            var state = ctx.State;
+
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
 
             var flags = ImGuiInputTextFlags.EnterReturnsTrue
@@ -35,21 +23,23 @@ namespace UnityEssentials
             var handle = GCHandle.Alloc(ctx, GCHandleType.Normal);
             try
             {
-                if (ImGui.InputText(InputTextId, ref ctx.InputState.Input, 2048, flags, InputCallback,
+                if (ImGui.InputText(InputTextId, ref state.Input, 2048, flags, InputCallback,
                         GCHandle.ToIntPtr(handle)))
                 {
-                    var line = ctx.InputState.Input;
-                    ctx.InputState.Input = string.Empty;
-                    ctx.InputState.LastQuery = string.Empty;
-                    ctx.InputState.UserEdited = false;
-                    ctx.InputState.HistoryIndex = -1;
+                    var line = state.Input;
+                    state.Input = string.Empty;
+                    state.LastQuery = string.Empty;
+                    state.UserEdited = false;
+                    state.HistoryIndex = -1;
 
-                    ctx.Suggestions.Clear();
-                    ctx.SuggestionIndex = -1;
+                    state.Suggestions.Clear();
+                    state.SuggestionIndex = -1;
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        ConsoleImGui.PushHistory(ctx, line);
+
+                        ConsoleInputShared.PushHistory(state.History, line);
+                        state.HistoryIndex = -1;
                         ConsoleHost.TryExecuteLine(line);
                     }
 
@@ -75,17 +65,6 @@ namespace UnityEssentials
             ImGui.SameLine();
         }
 
-        private static NavigationMode ResolveNavigationMode(ConsoleImGuiContext ctx, string query)
-        {
-            if (string.IsNullOrWhiteSpace(query))
-                return NavigationMode.History;
-
-            if (ctx.Suggestions.Count > 0 && ctx.SuggestionIndex >= 0)
-                return NavigationMode.Suggestions;
-
-            return NavigationMode.History;
-        }
-
         private static unsafe int InputCallback(ImGuiInputTextCallbackData* data)
         {
             var handle = GCHandle.FromIntPtr((IntPtr)data->UserData);
@@ -93,10 +72,10 @@ namespace UnityEssentials
 
             if (data->EventFlag == ImGuiInputTextFlags.CallbackEdit)
             {
-                ctx.InputState.UserEdited = true;
+                ctx.State.UserEdited = true;
 
                 var current = ImGuiUtf8InputBuffer.Read(data);
-                ctx.InputState.Input = current;
+                ctx.State.Input = current;
 
                 ConsoleImGui.UpdateSuggestions(ctx, current, false);
 
@@ -105,97 +84,99 @@ namespace UnityEssentials
 
             if (data->EventFlag == ImGuiInputTextFlags.CallbackHistory)
             {
+                var state = ctx.State;
                 var currentLine = ImGuiUtf8InputBuffer.Read(data);
-                ctx.InputState.Input = currentLine;
+                state.Input = currentLine;
 
                 ConsoleImGui.UpdateSuggestions(ctx, currentLine, false);
 
                 var query = ConsoleUtilities.GetCommandQuery(currentLine);
-                var mode = ResolveNavigationMode(ctx, query);
+                var mode = ConsoleInputShared.ResolveNavigationMode(query, state.Suggestions.Count, state.SuggestionIndex);
 
-                if (mode == NavigationMode.Suggestions)
+                if (mode == ConsoleInputNavigationMode.Suggestions)
                 {
                     if (data->EventKey == ImGuiKey.UpArrow)
-                        ctx.SuggestionIndex = Math.Max(0, ctx.SuggestionIndex - 1);
+                        state.SuggestionIndex = Math.Max(0, state.SuggestionIndex - 1);
 
                     if (data->EventKey == ImGuiKey.DownArrow)
-                        ctx.SuggestionIndex = Math.Min(ctx.Suggestions.Count - 1, ctx.SuggestionIndex + 1);
+                        state.SuggestionIndex = Math.Min(state.Suggestions.Count - 1, state.SuggestionIndex + 1);
 
                     return 0;
                 }
 
                 // History navigation.
-                ctx.SuggestionIndex = -1;
+                state.SuggestionIndex = -1;
 
-                if (ctx.History.Count == 0)
+                if (state.History.Count == 0)
                     return 0;
 
                 if (data->EventKey == ImGuiKey.UpArrow)
                 {
-                    if (ctx.InputState.HistoryIndex < 0)
-                        ctx.InputState.HistoryIndex = ctx.History.Count - 1;
+                    if (state.HistoryIndex < 0)
+                        state.HistoryIndex = state.History.Count - 1;
                     else
-                        ctx.InputState.HistoryIndex = Math.Max(0, ctx.InputState.HistoryIndex - 1);
+                        state.HistoryIndex = Math.Max(0, state.HistoryIndex - 1);
 
-                    if (ctx.InputState.HistoryIndex >= 0 && ctx.InputState.HistoryIndex < ctx.History.Count)
-                        ctx.InputState.Input = ctx.History[ctx.InputState.HistoryIndex];
+                    if (state.HistoryIndex >= 0 && state.HistoryIndex < state.History.Count)
+                        state.Input = state.History[state.HistoryIndex];
                 }
                 else if (data->EventKey == ImGuiKey.DownArrow)
                 {
-                    if (ctx.InputState.HistoryIndex < 0)
+                    if (state.HistoryIndex < 0)
                         return 0;
 
-                    ctx.InputState.HistoryIndex++;
-                    if (ctx.InputState.HistoryIndex >= ctx.History.Count)
+                    state.HistoryIndex++;
+                    if (state.HistoryIndex >= state.History.Count)
                     {
-                        ctx.InputState.HistoryIndex = -1;
-                        ctx.InputState.Input = string.Empty;
+                        state.HistoryIndex = -1;
+                        state.Input = string.Empty;
 
-                        ImGuiUtf8InputBuffer.Write(data, ctx.InputState.Input);
-                        ctx.InputState.UserEdited = false;
-                        ctx.Suggestions.Clear();
-                        ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
+                        ImGuiUtf8InputBuffer.Write(data, state.Input);
+                        state.UserEdited = false;
+                        state.Suggestions.Clear();
+                        state.LastQuery = ConsoleUtilities.GetCommandQuery(state.Input);
 
                         return 0;
                     }
 
-                    ctx.InputState.Input = ctx.History[ctx.InputState.HistoryIndex];
+                    state.Input = state.History[state.HistoryIndex];
                 }
 
-                ctx.InputState.UserEdited = false;
+                state.UserEdited = false;
 
-                ImGuiUtf8InputBuffer.Write(data, ctx.InputState.Input);
+                ImGuiUtf8InputBuffer.Write(data, state.Input);
 
-                ctx.Suggestions.Clear();
-                ctx.SuggestionIndex = -1;
-                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
+                state.Suggestions.Clear();
+                state.SuggestionIndex = -1;
+                state.LastQuery = ConsoleUtilities.GetCommandQuery(state.Input);
 
                 return 0;
             }
 
             if (data->EventFlag == ImGuiInputTextFlags.CallbackCompletion || data->EventKey == ImGuiKey.Tab)
             {
+                var state = ctx.State;
                 var currentLine = ImGuiUtf8InputBuffer.Read(data);
-                ctx.InputState.Input = currentLine;
+                state.Input = currentLine;
 
                 ConsoleImGui.UpdateSuggestions(ctx, currentLine, true);
 
-                if (ctx.Suggestions.Count == 0)
+                if (state.Suggestions.Count == 0)
                     return 0;
 
-                if (ctx.SuggestionIndex < 0)
-                    ctx.SuggestionIndex = 0;
+                if (state.SuggestionIndex < 0)
+                    state.SuggestionIndex = 0;
 
-                var completed = ConsoleUtilities.ReplaceCommandToken(currentLine, ctx.Suggestions[ctx.SuggestionIndex].Name);
+                var completed = ConsoleUtilities.ReplaceCommandToken(currentLine, state.Suggestions[state.SuggestionIndex].Name);
                 ImGuiUtf8InputBuffer.Write(data, completed);
 
-                ctx.InputState.Input = completed;
+                state.Input = completed;
 
-                ctx.InputState.UserEdited = false;
+                state.UserEdited = false;
 
-                ctx.Suggestions.Clear();
-                ctx.SuggestionIndex = -1;
-                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
+                state.Suggestions.Clear();
+                state.SuggestionIndex = -1;
+                state.LastQuery = ConsoleUtilities.GetCommandQuery(state.Input);
 
                 ctx.RequestFocusInput = true;
 

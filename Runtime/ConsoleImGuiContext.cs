@@ -13,13 +13,8 @@ namespace UnityEssentials
         public bool Body;
         public bool Collapse;
 
-        public readonly List<string> History = new(32);
-        public readonly List<ConsoleCommandRegistry.Command> Suggestions = new(16);
-
-        public int SuggestionIndex = -1;
+        public readonly ConsoleInputState State = new();
         public bool RequestFocusInput;
-
-        public readonly ConsoleImGuiDrawInputBar.InputState InputState = new();
 
         public Vector2 InputRectMin;
         public Vector2 InputRectMax;

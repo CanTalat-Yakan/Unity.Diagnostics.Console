@@ -26,8 +26,8 @@ namespace UnityEssentials
             ConsoleImGuiDrawInputBar.DrawImGui(ctx);
             ConsoleImGuiDrawFlyout.DrawImGui(ctx);
 
-            if (!ctx.InputState.UserEdited)
-                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.InputState.Input);
+            if (!ctx.State.UserEdited)
+                ctx.State.LastQuery = ConsoleUtilities.GetCommandQuery(ctx.State.Input);
         }
 
         private static void DrawLogList(ConsoleData data, Vector2 bodySize, bool collapse)

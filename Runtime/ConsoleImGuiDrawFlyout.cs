@@ -11,14 +11,16 @@ namespace UnityEssentials
 
         internal static void DrawImGui(ConsoleImGuiContext ctx)
         {
+            var state = ctx.State;
+
             // No suggestions to show.
-            if (!ctx.InputState.UserEdited)
+            if (!state.UserEdited)
                 return;
 
-            if (ctx.Suggestions.Count == 0)
+            if (state.Suggestions.Count == 0)
                 return;
 
-            if (string.IsNullOrWhiteSpace(ConsoleUtilities.GetCommandQuery(ctx.InputState.Input)))
+            if (string.IsNullOrWhiteSpace(ConsoleUtilities.GetCommandQuery(state.Input)))
                 return;
 
             if (!ctx.HasInputRect)
@@ -29,7 +31,7 @@ namespace UnityEssentials
             var inputMax = ctx.InputRectMax;
 
             var style = ImGui.GetStyle();
-            var visibleCount = MathF.Min(MaxVisible, ctx.Suggestions.Count);
+            var visibleCount = MathF.Min(MaxVisible, state.Suggestions.Count);
 
             var rowHeight = ImGui.GetFrameHeight();
             var contentHeight = visibleCount * rowHeight;
@@ -44,21 +46,21 @@ namespace UnityEssentials
             ImGui.BeginTooltip();
 
             // Clamp selection if the list shrank.
-            if (ctx.SuggestionIndex >= ctx.Suggestions.Count)
-                ctx.SuggestionIndex = ctx.Suggestions.Count - 1;
+            if (state.SuggestionIndex >= state.Suggestions.Count)
+                state.SuggestionIndex = state.Suggestions.Count - 1;
 
             // Once there's a token, default to the first entry.
-            if (ctx.SuggestionIndex < 0)
-                ctx.SuggestionIndex = 0;
+            if (state.SuggestionIndex < 0)
+                state.SuggestionIndex = 0;
 
             // Use a child so arrow-key navigation can keep the selection visible.
             ImGui.BeginChild(SuggestionsScrollId, Vector2.Zero, ImGuiChildFlags.None,
                 ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoMouseInputs);
 
-            for (var i = 0; i < ctx.Suggestions.Count; i++)
+            for (var i = 0; i < state.Suggestions.Count; i++)
             {
-                var cmd = ctx.Suggestions[i];
-                var isSelected = i == ctx.SuggestionIndex;
+                var cmd = state.Suggestions[i];
+                var isSelected = i == state.SuggestionIndex;
 
                 // Show command names only.
                 var display = cmd.Name;

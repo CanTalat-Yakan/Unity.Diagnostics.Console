@@ -87,97 +87,46 @@ namespace UnityEssentials
 
         internal static void UpdateSuggestions(ConsoleImGuiContext ctx, string input, bool force)
         {
-            if (!force && !ctx.InputState.UserEdited)
+            var state = ctx.State;
+
+            if (!force && !state.UserEdited)
             {
-                ctx.InputState.LastQuery = ConsoleUtilities.GetCommandQuery(input);
-                ctx.Suggestions.Clear();
-                ctx.SuggestionIndex = -1;
+                state.LastQuery = ConsoleUtilities.GetCommandQuery(input);
+                state.Suggestions.Clear();
+                state.SuggestionIndex = -1;
                 return;
             }
 
             var query = ConsoleUtilities.GetCommandQuery(input);
-            if (!force && string.Equals(query, ctx.InputState.LastQuery, StringComparison.Ordinal))
+            if (!force && string.Equals(query, state.LastQuery, StringComparison.Ordinal))
                 return;
 
-            ctx.InputState.LastQuery = query;
+            state.LastQuery = query;
 
             // Try to keep the currently selected entry.
-            var previousSelectedName = (ctx.SuggestionIndex >= 0 && ctx.SuggestionIndex < ctx.Suggestions.Count)
-                ? ctx.Suggestions[ctx.SuggestionIndex].Name
+            var previousSelectedName = (state.SuggestionIndex >= 0 && state.SuggestionIndex < state.Suggestions.Count)
+                ? state.Suggestions[state.SuggestionIndex].Name
                 : null;
 
-            ctx.Suggestions.Clear();
+            ConsoleInputShared.RebuildSuggestions(ConsoleHost.Commands.SortedCommands, query, state.Suggestions);
 
-            if (string.IsNullOrWhiteSpace(query))
+            if (state.Suggestions.Count == 0)
             {
-                ctx.SuggestionIndex = -1;
-                return;
-            }
-
-            // Iterate the already-sorted command list.
-            var cmds = ConsoleHost.Commands.SortedCommands;
-            for (var i = 0; i < cmds.Count; i++)
-            {
-                var cmd = cmds[i];
-
-                // Don't suggest the exact command name if it's already fully typed.
-                if (string.Equals(cmd.Name, query, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var name = cmd.Name;
-                var match = ConsoleUtilities.MatchCommandQuery(name, query);
-                if (!match.IsMatch)
-                    continue;
-
-                // Prefer direct prefix matches before token (separator) matches.
-                if (match.IsPrefixMatch)
-                    ctx.Suggestions.Insert(0, cmd);
-                else ctx.Suggestions.Add(cmd);
-            }
-
-            // Re-stabilize: keep prefix matches first, then everything else, both groups alphabetical.
-            if (ctx.Suggestions.Count > 1)
-            {
-                ctx.Suggestions.Sort((a, b) =>
-                {
-                    var ma = ConsoleUtilities.MatchCommandQuery(a.Name, query);
-                    var mb = ConsoleUtilities.MatchCommandQuery(b.Name, query);
-
-                    var pa = ma.IsPrefixMatch ? 0 : 1;
-                    var pb = mb.IsPrefixMatch ? 0 : 1;
-                    var p = pa.CompareTo(pb);
-                    return p != 0 ? p : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
-                });
-            }
-
-            if (ctx.Suggestions.Count == 0)
-            {
-                ctx.SuggestionIndex = -1;
+                state.SuggestionIndex = -1;
                 return;
             }
 
             // If we had a previous selection, try to keep it.
             if (!string.IsNullOrEmpty(previousSelectedName))
-                for (var i = 0; i < ctx.Suggestions.Count; i++)
-                    if (string.Equals(ctx.Suggestions[i].Name, previousSelectedName, StringComparison.Ordinal))
+                for (var i = 0; i < state.Suggestions.Count; i++)
+                    if (string.Equals(state.Suggestions[i].Name, previousSelectedName, StringComparison.Ordinal))
                     {
-                        ctx.SuggestionIndex = i;
+                        state.SuggestionIndex = i;
                         return;
                     }
 
             // Otherwise, pick a reasonable default.
-            ctx.SuggestionIndex = Math.Clamp(ctx.SuggestionIndex, 0, ctx.Suggestions.Count - 1);
-        }
-
-        internal static void PushHistory(ConsoleImGuiContext ctx, string line)
-        {
-            if (ctx.History.Count == 0 || !string.Equals(ctx.History[^1], line, StringComparison.Ordinal))
-                ctx.History.Add(line);
-
-            if (ctx.History.Count > 50)
-                ctx.History.RemoveAt(0);
-
-            ctx.InputState.HistoryIndex = -1;
+            state.SuggestionIndex = Math.Clamp(state.SuggestionIndex, 0, state.Suggestions.Count - 1);
         }
     }
 }
