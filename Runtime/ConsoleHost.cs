@@ -103,20 +103,38 @@ namespace UnityEssentials
         public static void Clear() =>
             Data.Clear();
 
-        public static void Print(string message) =>
-            Data.Add(ConsoleSeverity.Log, message ?? string.Empty, string.Empty);
+        public static void Print(string message, bool logToDebug = false)
+        {
+            var msg = message ?? string.Empty;
+            Data.Add(ConsoleSeverity.Log, msg, string.Empty);
 
-        public static void PrintWarning(string message) =>
-            Data.Add(ConsoleSeverity.Warning, message ?? string.Empty, string.Empty);
+            if (logToDebug)
+                Debug.Log(msg);
+        }
 
-        public static void PrintError(string message) =>
-            Data.Add(ConsoleSeverity.Error, message ?? string.Empty, string.Empty);
+        public static void PrintWarning(string message, bool logToDebug = false)
+        {
+            var msg = message ?? string.Empty;
+            Data.Add(ConsoleSeverity.Warning, msg, string.Empty);
+
+            if (logToDebug)
+                Debug.LogWarning(msg);
+        }
+
+        public static void PrintError(string message, bool logToDebug = false)
+        {
+            var msg = message ?? string.Empty;
+            Data.Add(ConsoleSeverity.Error, msg, string.Empty);
+
+            if (logToDebug)
+                Debug.LogError(msg);
+        }
 
         /// <summary>
         /// Lightweight interception hook that can handle a command line before normal command dispatch.
         /// Return true to stop processing (handled), false to continue with normal execution.
         /// </summary>
-        private delegate bool PreDispatchHandler(string cmdName, string args, string fullLine, out bool ok);
+        private delegate bool PreDispatchHandler(string cmdName, string args, string fullLine, bool logToDebug, out bool ok);
 
         // Note: Keep this list small and allocation-free. Order matters.
         private static readonly PreDispatchHandler[] s_preDispatchHandlers =
@@ -124,7 +142,7 @@ namespace UnityEssentials
             TryHandleInlineHelp,
         };
 
-        public static bool TryExecuteLine(string line)
+        public static bool TryExecuteLine(string line, bool logToDebug = false)
         {
             if (string.IsNullOrWhiteSpace(line))
                 return false;
@@ -135,25 +153,25 @@ namespace UnityEssentials
             var args = space < 0 ? string.Empty : trimmed.Substring(space + 1);
 
             // Echo the command.
-            Print($"> {trimmed}");
+            Print($"> {trimmed}", logToDebug);
 
             // Give a chance for small, special-case handlers to run before normal dispatch.
             // This keeps the main execution path clean and makes it easy to add new patterns later.
             for (var i = 0; i < s_preDispatchHandlers.Length; i++)
-                if (s_preDispatchHandlers[i](cmdName, args, trimmed, out var preOk))
+                if (s_preDispatchHandlers[i](cmdName, args, trimmed, logToDebug, out var preOk))
                     return preOk;
 
             var ok = Commands.TryExecute(cmdName, args, out var result);
 
             if (!string.IsNullOrWhiteSpace(result))
-                Print(result);
+                Print(result, logToDebug);
             else if (!ok)
-                PrintError($"Unknown command: {cmdName}");
+                PrintError($"Unknown command: {cmdName}", logToDebug);
 
             return ok;
         }
 
-        private static bool TryHandleInlineHelp(string cmdName, string args, string fullLine, out bool ok)
+        private static bool TryHandleInlineHelp(string cmdName, string args, string fullLine, bool logToDebug, out bool ok)
         {
             ok = false;
 
@@ -168,12 +186,12 @@ namespace UnityEssentials
             if (Commands.TryGet(cmdName, out var cmd))
             {
                 var desc = string.IsNullOrWhiteSpace(cmd.Description) ? "(no description)" : cmd.Description;
-                Print(desc);
+                Print(desc, logToDebug);
                 ok = true;
                 return true;
             }
 
-            PrintError($"Unknown command: {cmdName}");
+            PrintError($"Unknown command: {cmdName}", logToDebug);
             ok = false;
             return true;
         }
