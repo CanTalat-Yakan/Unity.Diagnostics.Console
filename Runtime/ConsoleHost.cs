@@ -153,7 +153,7 @@ namespace UnityEssentials
             var args = space < 0 ? string.Empty : trimmed.Substring(space + 1);
 
             // Echo the command.
-            Print($"> {trimmed}", logToDebug);
+            Print($"> {trimmed}");
 
             // Give a chance for small, special-case handlers to run before normal dispatch.
             // This keeps the main execution path clean and makes it easy to add new patterns later.
