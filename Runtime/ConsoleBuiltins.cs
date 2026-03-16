@@ -38,7 +38,7 @@ namespace UnityEssentials
         private static void ToggleImGuiDemoWindow() =>
             ConsoleHost.DemoWindow = !ConsoleHost.DemoWindow;
 
-        [Console("console.enable", "Toggles the console.")]
+        [Console("enable", "Toggles the console.")]
         private static void ToggleConsole() => 
             ConsoleHost.Enabled = !ConsoleHost.Enabled;
         
@@ -54,7 +54,7 @@ namespace UnityEssentials
         private static void ToggleConsoleBody() => 
             ConsoleImGui.Body = !ConsoleImGui.Body;
         
-        [Console("console.clear", "Clears the console log")]
+        [Console("clear", "Clears the console log")]
         private static void ClearConsole()
         {
             ConsoleHost.Clear();
@@ -67,7 +67,7 @@ namespace UnityEssentials
 #endif
         }
 
-        [Console("console.copy", "Copies the full console log to clipboard.")]
+        [Console("copy", "Copies the full console log to clipboard.")]
         private static string CopyConsoleToClipboard()
         {
             var data = ConsoleHost.Data;
@@ -102,22 +102,22 @@ namespace UnityEssentials
             return $"Copied {data.Count} entries to clipboard";
         }
 
-        [Console("console.echo", "Echoes arguments back. Usage: echo <text>")]
+        [Console("echo", "Echoes arguments back. Usage: echo <text>")]
         private static string Echo(string args) =>
             args ?? string.Empty;
         
-        [Console("console.log", "Logs message. Usage: log <text>")]
+        [Console("log", "Logs message. Usage: log <text>")]
         private static void Log(string args) =>
             Debug.Log(args ?? string.Empty);
 
-        [Console("application.gc", "Forces a GC.Collect")]
+        [Console("gc", "Forces a GC.Collect")]
         private static void Gc()
         {
             GC.Collect();
             ConsoleHost.Print("GC.Collect() called");
         }
 
-        [Console("application.quit", "Quits the application")]
+        [Console("quit", "Quits the application")]
         private static void Quit()
         {
 #if UNITY_EDITOR
@@ -214,6 +214,36 @@ namespace UnityEssentials
             if (string.IsNullOrEmpty(args))
                 return "Usage: scene.load <index|name>";
 
+            if (!Application.isPlaying)
+            {
+#if UNITY_EDITOR
+                // Resolve scene path from build settings
+                string scenePath = null;
+                if (int.TryParse(args, out var idx))
+                {
+                    scenePath = SceneUtility.GetScenePathByBuildIndex(idx);
+                    if (string.IsNullOrEmpty(scenePath))
+                        return $"No scene found at build index {idx}.";
+                }
+                else
+                {
+                    for (int i = 0; i < SceneManager.sceneCountInBuildSettings; i++)
+                    {
+                        var p = SceneUtility.GetScenePathByBuildIndex(i);
+                        if (System.IO.Path.GetFileNameWithoutExtension(p) == args)
+                        {
+                            scenePath = p;
+                            break;
+                        }
+                    }
+                    if (scenePath == null)
+                        return $"No scene named '{args}' found in build settings.";
+                }
+                UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath);
+                return $"Opened scene '{scenePath}' (editor).";
+#endif
+            }
+
             if (int.TryParse(args, out var buildIndex))
             {
                 SceneManager.LoadScene(buildIndex);
@@ -228,6 +258,19 @@ namespace UnityEssentials
         private static string SceneReload()
         {
             var s = SceneManager.GetActiveScene();
+
+            if (!Application.isPlaying)
+            {
+#if UNITY_EDITOR
+                if (!string.IsNullOrEmpty(s.path))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(s.path);
+                    return $"Reopened active scene '{s.name}' (editor).";
+                }
+                return "Cannot reload: active scene has no path.";
+#endif
+            }
+
             SceneManager.LoadScene(s.buildIndex);
             return $"Reloading active scene (buildIndex={s.buildIndex}, name={s.name})...";
         }
