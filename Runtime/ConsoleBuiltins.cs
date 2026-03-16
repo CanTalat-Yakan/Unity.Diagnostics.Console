@@ -38,7 +38,7 @@ namespace UnityEssentials
         private static void ToggleImGuiDemoWindow() =>
             ConsoleHost.DemoWindow = !ConsoleHost.DemoWindow;
 
-        [Console("enable", "Toggles the console.")]
+        [Console("console.enable", "Toggles the console.")]
         private static void ToggleConsole() => 
             ConsoleHost.Enabled = !ConsoleHost.Enabled;
         
