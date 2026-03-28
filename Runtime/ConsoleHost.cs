@@ -25,10 +25,6 @@ namespace UnityEssentials
         private static void Initialize() =>
             Commands.RegisterFromLoadedAssemblies();
 
-        [InitializeOnLoadMethod]
-        private static void InitializeEditor() =>
-            Commands.RegisterFromLoadedAssemblies();
-
         private void OnEnable() =>
             EnsureHooked();
 
